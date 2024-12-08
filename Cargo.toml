@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.94"
+base64 = "0.22.1"
 blake2 = "0.10.6"
