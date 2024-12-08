@@ -1,17 +1,27 @@
-use anyhow::Error;
+use std::collections::{hash_map, HashMap};
+
+use anyhow::{anyhow, Error};
 use blake2::{digest::consts::U32, Blake2b, Digest};
 
 use crate::rollsum::Rollsum;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
-enum SigType {
+pub enum SigType {
     Blake2B = 0x72730137,
+    // todo: md4
 }
 
 type Blake2b256 = Blake2b<U32>;
 
 impl SigType {
+    pub fn from_u32(x: u32) -> Result<Self, Error> {
+        match x {
+            _ if x == SigType::Blake2B as u32 => Ok(SigType::Blake2B),
+            _ => Err(anyhow!("invalid signature type magic")),
+        }
+    }
+
     pub fn to_bytes(self) -> [u8; 4] {
         (self as u32).to_be_bytes()
     }
@@ -70,6 +80,55 @@ where
     }
 
     Ok(())
+}
+
+pub struct Signature {
+    pub sigtype: SigType,
+    pub block_len: u32,
+    pub strong_len: u32,
+    pub strong_sigs: Vec<Vec<u8>>,
+    pub weak2block: HashMap<u32, i32>,
+}
+
+pub fn read_signature<I>(input: &mut I) -> Result<Signature, Error>
+where
+    I: std::io::Read,
+{
+    let mut buf32 = [0u8; 4];
+    input.read_exact(&mut buf32)?;
+    let sigtype = u32::from_be_bytes(buf32);
+    let sigtype = SigType::from_u32(sigtype)?;
+
+    input.read_exact(&mut buf32)?;
+    let block_len = u32::from_be_bytes(buf32);
+
+    input.read_exact(&mut buf32)?;
+    let strong_len = u32::from_be_bytes(buf32);
+
+    let mut strong_sigs: Vec<Vec<u8>> = vec![];
+    let mut weak2block: HashMap<u32, i32> = HashMap::new();
+
+    loop {
+        let n = input.read(&mut buf32)?;
+        if n == 0 {
+            break;
+        }
+        let weak_sum = u32::from_be_bytes(buf32);
+
+        let mut strong_sum = vec![0u8; strong_len as usize];
+        input.read_exact(&mut strong_sum)?;
+
+        weak2block.insert(weak_sum, strong_sigs.len() as i32);
+        strong_sigs.push(strong_sum);
+    }
+
+    Ok(Signature {
+        sigtype,
+        block_len,
+        strong_len,
+        strong_sigs,
+        weak2block,
+    })
 }
 
 #[cfg(test)]
