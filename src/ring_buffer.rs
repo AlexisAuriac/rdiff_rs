@@ -6,6 +6,7 @@ pub struct RingBuffer {
     cursor: usize,
     written: usize,
     data: Vec<u8>,
+    out: Vec<u8>,
 }
 
 impl RingBuffer {
@@ -15,6 +16,7 @@ impl RingBuffer {
             cursor: 0,
             written: 0,
             data: vec![0u8; size],
+            out: vec![0u8; size],
         }
     }
 
@@ -22,21 +24,19 @@ impl RingBuffer {
         self.written
     }
 
-    pub fn as_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&mut self) -> &[u8] {
         if self.written >= self.size && self.cursor == 0 {
-            self.data.clone()
+            &self.data
         } else if self.written > self.size {
-            let mut out = vec![0u8; self.size];
-
             let (left_data, right_data) = self.data.split_at(self.cursor);
-            let (left_out, right_out) = out.split_at_mut(self.size - self.cursor);
+            let (left_out, right_out) = self.out.split_at_mut(self.size - self.cursor);
 
             left_out.copy_from_slice(right_data);
             right_out.copy_from_slice(left_data);
 
-            out
+            &self.out
         } else {
-            self.data[..self.cursor].to_vec()
+            &self.data[..self.cursor]
         }
     }
 

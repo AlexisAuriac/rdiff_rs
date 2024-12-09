@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 
 use anyhow::{anyhow, Error};
 
@@ -26,6 +26,8 @@ where
     if lit_buff.len() != 0 || lit_buff.capacity() != OUTPUT_BUFFER_SIZE {
         return Err(anyhow!("bad literal buffer"));
     }
+
+    let mut input = BufReader::new(input);
 
     output.write(&DELTA_MAGIC.to_be_bytes())?;
 
@@ -73,7 +75,7 @@ where
     }
 
     for b in ring_buf.as_bytes() {
-        m.add(MatchKind::Literal, b as u64, 1)?;
+        m.add(MatchKind::Literal, *b as u64, 1)?;
     }
 
     m.flush()?;
