@@ -1,3 +1,5 @@
+// largely based on https://github.com/armon/circbuf
+
 #[derive(Debug)]
 pub struct RingBuffer {
     size: usize,

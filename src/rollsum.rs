@@ -16,6 +16,10 @@ impl Rollsum {
         };
     }
 
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
     pub fn update(&mut self, p: &[u8]) {
         let l = p.len();
 
@@ -47,7 +51,38 @@ impl Rollsum {
         self.count += l;
     }
 
+    pub fn rotate(&mut self, outb: u8, inb: u8) {
+        self.s1 = self.s1.wrapping_add(inb.wrapping_sub(outb) as u16);
+        self.s2 = self.s2.wrapping_add(self.s1);
+    }
+
+    pub fn roll_in(&mut self, inb: u8) {
+        self.s1 = self
+            .s1
+            .wrapping_add(inb as u16)
+            .wrapping_add(ROLLSUM_CHAR_OFFSET);
+        self.s2 = self.s2.wrapping_add(self.s1);
+        self.count += 1;
+    }
+
+    pub fn roll_out(&mut self, outb: u8) {
+        self.s1 = self
+            .s1
+            .wrapping_sub(outb as u16)
+            .wrapping_sub(ROLLSUM_CHAR_OFFSET);
+        self.s2 = self
+            .s2
+            .wrapping_sub((self.count as u16).wrapping_mul(outb as u16 + ROLLSUM_CHAR_OFFSET));
+        self.count -= 1;
+    }
+
     pub fn digest(&self) -> u32 {
         return ((self.s2 as u32) << 16) | ((self.s1 as u32) & 0xffff);
+    }
+
+    pub fn reset(&mut self) {
+        self.count = 0;
+        self.s1 = 0;
+        self.s2 = 0;
     }
 }

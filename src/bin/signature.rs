@@ -40,7 +40,6 @@ fn main() -> Result<(), Error> {
         .open(&opts.out_file)?;
 
     signature(&mut in_file, &mut out_file)?;
-    println!("{:?}", opts);
 
     Ok(())
 }
