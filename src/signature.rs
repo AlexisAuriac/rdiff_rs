@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, Error};
 use blake2::{digest::consts::U32, Blake2b, Digest};
+use md4::Md4;
 
 use crate::rollsum::Rollsum;
 
@@ -9,16 +10,27 @@ use crate::rollsum::Rollsum;
 #[derive(Debug, Clone, Copy)]
 pub enum SigType {
     Blake2B = 0x72730137,
-    // todo: md4
+    // deprecated <https://github.com/librsync/librsync/issues/5>
+    Md4 = 0x72730136,
 }
 
 type Blake2b256 = Blake2b<U32>;
+
+const BLAKE2_SUM_LENGTH: u32 = 32;
+const MD4_SUM_LENGTH: u32 = 16;
 
 impl SigType {
     pub fn from_u32(x: u32) -> Result<Self, Error> {
         match x {
             _ if x == SigType::Blake2B as u32 => Ok(SigType::Blake2B),
             _ => Err(anyhow!("invalid signature type magic")),
+        }
+    }
+
+    pub fn sum_length(&self) -> u32 {
+        match self {
+            Self::Blake2B => BLAKE2_SUM_LENGTH,
+            Self::Md4 => MD4_SUM_LENGTH,
         }
     }
 
@@ -37,6 +49,15 @@ impl SigType {
                     .drain(..(strong_len as usize))
                     .collect()
             }
+            Self::Md4 => {
+                let mut hasher = Md4::new();
+                hasher.update(data);
+                hasher
+                    .finalize()
+                    .to_vec()
+                    .drain(..(strong_len as usize))
+                    .collect()
+            }
         }
     }
 }
@@ -47,22 +68,30 @@ fn compute_weak_checksum(data: &[u8]) -> u32 {
     return sum.digest();
 }
 
-pub fn signature<I, O>(input: &mut I, output: &mut O) -> Result<(), Error>
+pub fn signature<I, O>(
+    input: &mut I,
+    output: &mut O,
+    block_len: u32,
+    strong_len: u32,
+    sigtype: SigType,
+) -> Result<(), Error>
 where
     I: std::io::Read,
     O: std::io::Write,
 {
-    const block_len: u32 = 2048;
-    const strong_len: u32 = 32;
-    const sigtype: SigType = SigType::Blake2B;
-
-    // todo: check max strong len
+    if strong_len > sigtype.sum_length() {
+        return Err(anyhow!(
+            "invalid strong len {} for sigtype {:?}",
+            strong_len,
+            sigtype
+        ));
+    }
 
     output.write(&sigtype.to_bytes())?;
     output.write(&block_len.to_be_bytes())?;
     output.write(&strong_len.to_be_bytes())?;
 
-    let mut block = [0u8; block_len as usize];
+    let mut block = vec![0u8; block_len as usize];
 
     loop {
         let n = input.read(&mut block[..])?;
@@ -149,7 +178,7 @@ mod tests {
         let expect_sig = BASE64_STANDARD.decode(&sig_b64)?;
         let mut out = Cursor::new(Vec::new());
 
-        signature(&mut data_cursor, &mut out)?;
+        signature(&mut data_cursor, &mut out, 2048, 32, SigType::Blake2B)?;
 
         let actual_sig = out.into_inner();
         assert_eq!(actual_sig, expect_sig);
@@ -167,7 +196,7 @@ mod tests {
         let expect_sig = BASE64_STANDARD.decode(&sig_b64)?;
         let mut out = Cursor::new(Vec::new());
 
-        signature(&mut data_cursor, &mut out)?;
+        signature(&mut data_cursor, &mut out, 2048, 32, SigType::Blake2B)?;
 
         let actual_sig = out.into_inner();
         assert_eq!(actual_sig, expect_sig);

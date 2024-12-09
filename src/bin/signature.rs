@@ -1,7 +1,7 @@
 use std::{env, fs, path::PathBuf};
 
 use anyhow::{anyhow, Error};
-use rdiff::signature::signature;
+use rdiff::signature::{signature, SigType};
 
 #[derive(Debug)]
 struct Opts {
@@ -29,6 +29,10 @@ fn parse_opts() -> Result<Opts, Error> {
     Ok(Opts { in_file, out_file })
 }
 
+const BLOCK_LEN: u32 = 2048;
+const STRONG_LEN: u32 = 32;
+const SIGTYPE: SigType = SigType::Blake2B;
+
 fn main() -> Result<(), Error> {
     let opts = parse_opts()?;
 
@@ -39,7 +43,7 @@ fn main() -> Result<(), Error> {
         .write(true)
         .open(&opts.out_file)?;
 
-    signature(&mut in_file, &mut out_file)?;
+    signature(&mut in_file, &mut out_file, BLOCK_LEN, STRONG_LEN, SIGTYPE)?;
 
     Ok(())
 }
