@@ -11,7 +11,7 @@ use crate::{
 
 const OUTPUT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
-const DELTA_MAGIC: u32 = 0x72730236;
+pub const DELTA_MAGIC: u32 = 0x72730236;
 
 pub fn delta_buf<I, O>(
     sig: &Signature,
