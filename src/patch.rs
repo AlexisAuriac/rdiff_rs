@@ -79,3 +79,158 @@ where
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, io::Cursor, path::PathBuf};
+
+    use crate::{delta::delta, signature::read_signature_file};
+
+    use super::*;
+
+    macro_rules! test_patch {
+        ($($name:ident: $value:expr,)*) => {
+            $(
+                #[test]
+                fn $name() -> Result<(), Error> {
+                    let (name, sigtype, block_len, strong_len) = $value;
+                    let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
+
+                    match sigtype {
+                        "blake2" | "md4" => (),
+                        _ => return Err(anyhow!("{}: invalid signature type", sigtype)),
+                    };
+
+                    let old_path = PathBuf::from("testdata").join(name).with_extension("old");
+                    let mut old_data = Cursor::new(fs::read(old_path)?);
+
+                    let delta_path = PathBuf::from("testdata")
+                        .join(&file_base_name)
+                        .with_extension("delta");
+                    let mut delta_data = Cursor::new(fs::read(delta_path)?);
+
+                    let mut output = Cursor::new(vec![]);
+                    patch(&mut old_data, &mut delta_data, &mut output)?;
+
+                    let want_new_path = PathBuf::from("testdata").join(&name).with_extension("new");
+                    let want_new_data = fs::read(want_new_path)?;
+
+                    assert_eq!(output.into_inner(), want_new_data);
+
+                    Ok(())
+                }
+            )*
+        };
+    }
+
+    test_patch!(
+        patch_000_blake2_11_23: ("000", "blake2", 11, 23),
+        patch_000_blake2_512_32: ("000", "blake2", 512, 32),
+        patch_000_md4_256_7: ("000", "md4", 256, 7),
+        patch_001_blake2_512_32: ("001", "blake2", 512, 32),
+        patch_001_blake2_776_31: ("001", "blake2", 776, 31),
+        patch_001_md4_777_15: ("001", "md4", 777, 15),
+        patch_002_blake2_512_32: ("002", "blake2", 512, 32),
+        patch_002_blake2_431_19: ("002", "blake2", 431, 19),
+        patch_002_md4_128_16: ("002", "md4", 128, 16),
+        patch_003_blake2_512_32: ("003", "blake2", 512, 32),
+        patch_003_blake2_1024_13: ("003", "blake2", 1024, 13),
+        patch_003_md4_1024_13: ("003", "md4", 1024, 13),
+        patch_004_blake2_1024_28: ("004", "blake2", 1024, 28),
+        patch_004_blake2_2222_31: ("004", "blake2", 2222, 31),
+        patch_004_blake2_512_32: ("004", "blake2", 512, 32),
+        patch_005_blake2_512_32: ("005", "blake2", 512, 32),
+        patch_005_blake2_1000_18: ("005", "blake2", 1000, 18),
+        patch_005_md4_999_14: ("005", "md4", 999, 14),
+        patch_006_blake2_2_32: ("006", "blake2", 2, 32),
+        patch_007_blake2_5_32: ("007", "blake2", 5, 32),
+        patch_007_blake2_4_32: ("007", "blake2", 4, 32),
+        patch_007_blake2_3_32: ("007", "blake2", 3, 32),
+        patch_008_blake2_222_30: ("008", "blake2", 222, 30),
+        patch_008_blake2_512_32: ("008", "blake2", 512, 32),
+        patch_008_md4_111_11: ("008", "md4", 111, 11),
+        patch_009_blake2_2048_26: ("009", "blake2", 2048, 26),
+        patch_009_blake2_512_32: ("009", "blake2", 512, 32),
+        patch_009_md4_2033_15: ("009", "md4", 2033, 15),
+        patch_010_blake2_512_32: ("010", "blake2", 512, 32),
+        patch_010_blake2_7_6: ("010", "blake2", 7, 6),
+        patch_010_md4_4096_8: ("010", "md4", 4096, 8),
+        patch_011_blake2_3_32: ("011", "blake2", 3, 32),
+        patch_011_md4_3_9: ("011", "md4", 3, 9),
+    );
+
+    macro_rules! test_delta_and_patch {
+        ($($name:ident: $value:expr,)*) => {
+            $(
+                #[test]
+                fn $name() -> Result<(), Error> {
+                    let (name, sigtype, block_len, strong_len) = $value;
+                    let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
+
+                    match sigtype {
+                        "blake2" | "md4" => (),
+                        _ => return Err(anyhow!("{}: invalid signature type", sigtype)),
+                    };
+
+                    let sig_path = PathBuf::from("testdata")
+                        .join(file_base_name)
+                        .with_extension("signature");
+                    let sig = read_signature_file(&sig_path)?;
+
+                    let new_path = PathBuf::from("testdata").join(name).with_extension("new");
+                    let mut new_data = Cursor::new(fs::read(new_path)?);
+
+                    let mut delta_data = Cursor::new(vec![]);
+                    delta(&sig, &mut new_data, &mut delta_data)?;
+
+                    let old_path = PathBuf::from("testdata").join(name).with_extension("old");
+                    let mut old_data = Cursor::new(fs::read(old_path)?);
+
+                    delta_data.set_position(0);
+                    let mut patched_data = Cursor::new(vec![]);
+                    patch(&mut old_data, &mut delta_data, &mut patched_data)?;
+
+                    assert_eq!(patched_data.into_inner(), new_data.into_inner());
+
+                    Ok(())
+                }
+            )*
+        };
+    }
+
+    test_delta_and_patch!(
+        delta_and_patch_000_blake2_11_23: ("000", "blake2", 11, 23),
+        delta_and_patch_000_blake2_512_32: ("000", "blake2", 512, 32),
+        delta_and_patch_000_md4_256_7: ("000", "md4", 256, 7),
+        delta_and_patch_001_blake2_512_32: ("001", "blake2", 512, 32),
+        delta_and_patch_001_blake2_776_31: ("001", "blake2", 776, 31),
+        delta_and_patch_001_md4_777_15: ("001", "md4", 777, 15),
+        delta_and_patch_002_blake2_512_32: ("002", "blake2", 512, 32),
+        delta_and_patch_002_blake2_431_19: ("002", "blake2", 431, 19),
+        delta_and_patch_002_md4_128_16: ("002", "md4", 128, 16),
+        delta_and_patch_003_blake2_512_32: ("003", "blake2", 512, 32),
+        delta_and_patch_003_blake2_1024_13: ("003", "blake2", 1024, 13),
+        delta_and_patch_003_md4_1024_13: ("003", "md4", 1024, 13),
+        delta_and_patch_004_blake2_1024_28: ("004", "blake2", 1024, 28),
+        delta_and_patch_004_blake2_2222_31: ("004", "blake2", 2222, 31),
+        delta_and_patch_004_blake2_512_32: ("004", "blake2", 512, 32),
+        delta_and_patch_005_blake2_512_32: ("005", "blake2", 512, 32),
+        delta_and_patch_005_blake2_1000_18: ("005", "blake2", 1000, 18),
+        delta_and_patch_005_md4_999_14: ("005", "md4", 999, 14),
+        delta_and_patch_006_blake2_2_32: ("006", "blake2", 2, 32),
+        delta_and_patch_007_blake2_5_32: ("007", "blake2", 5, 32),
+        delta_and_patch_007_blake2_4_32: ("007", "blake2", 4, 32),
+        delta_and_patch_007_blake2_3_32: ("007", "blake2", 3, 32),
+        delta_and_patch_008_blake2_222_30: ("008", "blake2", 222, 30),
+        delta_and_patch_008_blake2_512_32: ("008", "blake2", 512, 32),
+        delta_and_patch_008_md4_111_11: ("008", "md4", 111, 11),
+        delta_and_patch_009_blake2_2048_26: ("009", "blake2", 2048, 26),
+        delta_and_patch_009_blake2_512_32: ("009", "blake2", 512, 32),
+        delta_and_patch_009_md4_2033_15: ("009", "md4", 2033, 15),
+        delta_and_patch_010_blake2_512_32: ("010", "blake2", 512, 32),
+        delta_and_patch_010_blake2_7_6: ("010", "blake2", 7, 6),
+        delta_and_patch_010_md4_4096_8: ("010", "md4", 4096, 8),
+        delta_and_patch_011_blake2_3_32: ("011", "blake2", 3, 32),
+        delta_and_patch_011_md4_3_9: ("011", "md4", 3, 9),
+    );
+}
