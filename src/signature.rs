@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fs::OpenOptions, path::Path};
 
 use anyhow::{anyhow, Error};
 use blake2::{digest::consts::U32, Blake2b, Digest};
@@ -7,7 +7,7 @@ use md4::Md4;
 use crate::rollsum::Rollsum;
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SigType {
     Blake2B = 0x72730137,
     // deprecated <https://github.com/librsync/librsync/issues/5>
@@ -160,47 +160,90 @@ where
     })
 }
 
+pub fn read_signature_file(path: &Path) -> Result<Signature, Error> {
+    let mut f = OpenOptions::new().read(true).open(path)?;
+    read_signature(&mut f)
+}
+
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-
-    use base64::prelude::*;
+    use std::{fs, io::Cursor, path::PathBuf};
 
     use super::*;
 
-    #[test]
-    fn test_signature() -> Result<(), Error> {
-        let data = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
-        let sig_b64 = b"cnMBNwAACAAAAAAghvva69bZA09h4vetpuWMJS4VaEyN9/Cxl6ldgPQsoKNoXeJu";
+    macro_rules! test_signature {
+        ($($name:ident: $value:expr,)*) => {
+            $(
+                #[test]
+                fn $name() -> Result<(), Error> {
+                    let (name, sigtype, block_len, strong_len) = $value;
+                    let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
+                    let sigtype = match sigtype {
+                        "blake2" => SigType::Blake2B,
+                        "md4" => SigType::Md4,
+                        _ => return Err(anyhow!("{}: invalid signature type", sigtype)),
+                    };
 
-        let mut data_cursor = Cursor::new(data);
+                    let old_data_path = PathBuf::from("testdata").join(name).with_extension("old");
+                    let mut input = Cursor::new(fs::read(&old_data_path)?);
 
-        let expect_sig = BASE64_STANDARD.decode(&sig_b64)?;
-        let mut out = Cursor::new(Vec::new());
+                    let mut output = Cursor::new(vec![]);
 
-        signature(&mut data_cursor, &mut out, 2048, 32, SigType::Blake2B)?;
+                    signature(&mut input, &mut output, block_len, strong_len, sigtype)?;
+                    output.set_position(0);
+                    let got_sig = read_signature(&mut output)?;
 
-        let actual_sig = out.into_inner();
-        assert_eq!(actual_sig, expect_sig);
+                    let want_sig_path = PathBuf::from("testdata")
+                        .join(file_base_name)
+                        .with_extension("signature");
+                    let mut want_sig_data = Cursor::new(fs::read(want_sig_path)?);
+                    let want_sig = read_signature(&mut want_sig_data)?;
 
-        Ok(())
+                    assert_eq!(got_sig.sigtype, want_sig.sigtype);
+                    assert_eq!(got_sig.block_len, want_sig.block_len);
+                    assert_eq!(got_sig.strong_len, want_sig.strong_len);
+
+                    assert_eq!(output.into_inner(), want_sig_data.into_inner());
+
+                    Ok(())
+                }
+            )*
+        };
     }
 
-    #[test]
-    fn test_signature_empty_source() -> Result<(), Error> {
-        let data = b"";
-        let sig_b64 = b"cnMBNwAACAAAAAAg";
-
-        let mut data_cursor = Cursor::new(data);
-
-        let expect_sig = BASE64_STANDARD.decode(&sig_b64)?;
-        let mut out = Cursor::new(Vec::new());
-
-        signature(&mut data_cursor, &mut out, 2048, 32, SigType::Blake2B)?;
-
-        let actual_sig = out.into_inner();
-        assert_eq!(actual_sig, expect_sig);
-
-        Ok(())
-    }
+    test_signature!(
+        signature_000_blake2_11_23: ("000", "blake2", 11, 23),
+        signature_000_blake2_512_32: ("000", "blake2", 512, 32),
+        signature_000_md4_256_7: ("000", "md4", 256, 7),
+        signature_001_blake2_512_32: ("001", "blake2", 512, 32),
+        signature_001_blake2_776_31: ("001", "blake2", 776, 31),
+        signature_001_md4_777_15: ("001", "md4", 777, 15),
+        signature_002_blake2_512_32: ("002", "blake2", 512, 32),
+        signature_002_blake2_431_19: ("002", "blake2", 431, 19),
+        signature_002_md4_128_16: ("002", "md4", 128, 16),
+        signature_003_blake2_512_32: ("003", "blake2", 512, 32),
+        signature_003_blake2_1024_13: ("003", "blake2", 1024, 13),
+        signature_003_md4_1024_13: ("003", "md4", 1024, 13),
+        signature_004_blake2_1024_28: ("004", "blake2", 1024, 28),
+        signature_004_blake2_2222_31: ("004", "blake2", 2222, 31),
+        signature_004_blake2_512_32: ("004", "blake2", 512, 32),
+        signature_005_blake2_512_32: ("005", "blake2", 512, 32),
+        signature_005_blake2_1000_18: ("005", "blake2", 1000, 18),
+        signature_005_md4_999_14: ("005", "md4", 999, 14),
+        signature_006_blake2_2_32: ("006", "blake2", 2, 32),
+        signature_007_blake2_5_32: ("007", "blake2", 5, 32),
+        signature_007_blake2_4_32: ("007", "blake2", 4, 32),
+        signature_007_blake2_3_32: ("007", "blake2", 3, 32),
+        signature_008_blake2_222_30: ("008", "blake2", 222, 30),
+        signature_008_blake2_512_32: ("008", "blake2", 512, 32),
+        signature_008_md4_111_11: ("008", "md4", 111, 11),
+        signature_009_blake2_2048_26: ("009", "blake2", 2048, 26),
+        signature_009_blake2_512_32: ("009", "blake2", 512, 32),
+        signature_009_md4_2033_15: ("009", "md4", 2033, 15),
+        signature_010_blake2_512_32: ("010", "blake2", 512, 32),
+        signature_010_blake2_7_6: ("010", "blake2", 7, 6),
+        signature_010_md4_4096_8: ("010", "md4", 4096, 8),
+        signature_011_blake2_3_32: ("011", "blake2", 3, 32),
+        signature_011_md4_3_9: ("011", "md4", 3, 9),
+    );
 }
