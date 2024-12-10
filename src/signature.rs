@@ -23,6 +23,7 @@ impl SigType {
     pub fn from_u32(x: u32) -> Result<Self, Error> {
         match x {
             _ if x == SigType::Blake2B as u32 => Ok(SigType::Blake2B),
+            _ if x == SigType::Md4 as u32 => Ok(SigType::Md4),
             _ => Err(anyhow!("invalid signature type magic")),
         }
     }
