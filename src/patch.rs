@@ -84,7 +84,7 @@ where
 mod tests {
     use std::{fs, io::Cursor, path::PathBuf};
 
-    use crate::{delta::delta, signature::read_signature_file};
+    use crate::{delta::delta, signature::read_signature_file, signature::SigType};
 
     use super::*;
 
@@ -94,12 +94,8 @@ mod tests {
                 #[test]
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
+                    SigType::from_str(sigtype)?;
                     let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
-
-                    match sigtype {
-                        "blake2" | "md4" => (),
-                        _ => return Err(anyhow!("{}: invalid signature type", sigtype)),
-                    };
 
                     let old_path = PathBuf::from("testdata").join(name).with_extension("old");
                     let mut old_data = Cursor::new(fs::read(old_path)?);
@@ -165,12 +161,8 @@ mod tests {
                 #[test]
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
+                    SigType::from_str(sigtype)?;
                     let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
-
-                    match sigtype {
-                        "blake2" | "md4" => (),
-                        _ => return Err(anyhow!("{}: invalid signature type", sigtype)),
-                    };
 
                     let sig_path = PathBuf::from("testdata")
                         .join(file_base_name)

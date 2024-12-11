@@ -28,6 +28,14 @@ impl SigType {
         }
     }
 
+    pub fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "blake2" => Ok(SigType::Blake2B),
+            "md4" => Ok(SigType::Md4),
+            _ => return Err(anyhow!("{}: invalid signature type", s)),
+        }
+    }
+
     pub fn sum_length(&self) -> u32 {
         match self {
             Self::Blake2B => BLAKE2_SUM_LENGTH,
@@ -179,11 +187,7 @@ mod tests {
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
                     let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
-                    let sigtype = match sigtype {
-                        "blake2" => SigType::Blake2B,
-                        "md4" => SigType::Md4,
-                        _ => return Err(anyhow!("{}: invalid signature type", sigtype)),
-                    };
+                    let sigtype = SigType::from_str(sigtype)?;
 
                     let old_data_path = PathBuf::from("testdata").join(name).with_extension("old");
                     let mut input = Cursor::new(fs::read(&old_data_path)?);
