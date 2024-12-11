@@ -49,7 +49,6 @@ enum Command {
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
-#[command(propagate_version = true)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
