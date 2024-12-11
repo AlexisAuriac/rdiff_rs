@@ -109,8 +109,6 @@ fn run_patch(basis: String, delta_file: String, new_file: String) -> Result<(), 
 fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
-    println!("{:?}", cli);
-
     match cli.command {
         Command::Signature {
             basis,
