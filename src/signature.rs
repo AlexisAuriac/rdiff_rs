@@ -74,6 +74,101 @@ fn compute_weak_checksum(data: &[u8]) -> u32 {
     return sum.digest();
 }
 
+pub struct SignatureJob<'a, I, O> {
+    input: &'a mut I,
+    output: &'a mut O,
+    block_len: u32,
+    strong_len: u32,
+    sigtype: SigType,
+    wrote_header: bool,
+    block_buf: Vec<u8>,
+}
+
+impl<'a, I, O> SignatureJob<'a, I, O>
+where
+    I: Read,
+    O: Write,
+{
+    pub fn new(
+        input: &'a mut I,
+        output: &'a mut O,
+        block_len: u32,
+        strong_len: u32,
+        sigtype: SigType,
+    ) -> Result<Self, Error> {
+        if strong_len > sigtype.sum_length() {
+            return Err(anyhow!(
+                "invalid strong len {} for sigtype {:?}",
+                strong_len,
+                sigtype
+            ));
+        }
+
+        Ok(Self {
+            input,
+            output,
+            block_len,
+            strong_len,
+            sigtype,
+            wrote_header: false,
+            block_buf: vec![0u8; block_len as usize],
+        })
+    }
+
+    fn write_header(&mut self) -> Result<(), Error> {
+        assert!(!self.wrote_header, "try to write header multiple times");
+
+        self.output.write(&self.sigtype.to_bytes())?;
+        self.output.write(&self.block_len.to_be_bytes())?;
+        self.output.write(&self.strong_len.to_be_bytes())?;
+
+        self.wrote_header = true;
+
+        Ok(())
+    }
+}
+
+pub enum SignatureEvent {
+    Header,
+    Block,
+}
+
+impl<'a, I, O> Iterator for SignatureJob<'a, I, O>
+where
+    I: Read,
+    O: Write,
+{
+    type Item = Result<SignatureEvent, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.wrote_header {
+            return Some(self.write_header().map(|_| SignatureEvent::Header));
+        }
+
+        let n = match self.input.read(&mut self.block_buf[..]) {
+            Err(err) => return Some(Err(err.into())),
+            Ok(n) => n,
+        };
+        if n == 0 {
+            return None;
+        }
+
+        let data = &self.block_buf[..n];
+
+        let weak = compute_weak_checksum(data);
+        if let Err(err) = self.output.write(&weak.to_be_bytes()) {
+            return Some(Err(err.into()));
+        }
+
+        let strong = self.sigtype.strong_sum(data, self.strong_len);
+        if let Err(err) = self.output.write(&strong) {
+            return Some(Err(err.into()));
+        }
+
+        Some(Ok(SignatureEvent::Block))
+    }
+}
+
 pub fn signature<I, O>(
     input: &mut I,
     output: &mut O,
@@ -85,36 +180,11 @@ where
     I: Read,
     O: Write,
 {
-    if strong_len > sigtype.sum_length() {
-        return Err(anyhow!(
-            "invalid strong len {} for sigtype {:?}",
-            strong_len,
-            sigtype
-        ));
+    let job = SignatureJob::new(input, output, block_len, strong_len, sigtype)?;
+
+    for ev in job {
+        ev?;
     }
-
-    output.write(&sigtype.to_bytes())?;
-    output.write(&block_len.to_be_bytes())?;
-    output.write(&strong_len.to_be_bytes())?;
-
-    let mut block = vec![0u8; block_len as usize];
-
-    loop {
-        let n = input.read(&mut block[..])?;
-        if n == 0 {
-            break;
-        }
-
-        let data = &block[..n];
-
-        let weak = compute_weak_checksum(data);
-        output.write(&weak.to_be_bytes())?;
-
-        let strong = sigtype.strong_sum(data, strong_len);
-        output.write(&strong)?;
-    }
-
-    output.flush()?;
 
     Ok(())
 }
