@@ -1,8 +1,12 @@
-use std::fs::{remove_file, OpenOptions};
+use std::{
+    fs::{remove_file, OpenOptions},
+    io::{BufReader, BufWriter},
+};
 
 use anyhow::Error;
 use clap::{Parser, Subcommand};
 use rdiff::{
+    buf_reader_with_retry::BufReaderWithRetry,
     delta::delta,
     patch::patch,
     signature::{read_signature, signature, SigType},
@@ -63,14 +67,20 @@ fn run_signature(
 ) -> Result<(), Error> {
     let sigtype = SigType::from_str(&hash)?;
 
-    let mut in_file = OpenOptions::new().read(true).open(&basis)?;
-    let mut out_file = OpenOptions::new()
+    let in_file = OpenOptions::new().read(true).open(&basis)?;
+    let out_file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
         .open(&sig_file)?;
 
-    let res = signature(&mut in_file, &mut out_file, block_size, sum_size, sigtype);
+    let res = signature(
+        &mut BufReaderWithRetry::new(&in_file), // dramatically improves perf for small block len
+        &mut BufWriter::new(&out_file),
+        block_size,
+        sum_size,
+        sigtype,
+    );
     if let Err(err) = res {
         drop(out_file);
         remove_file(&sig_file).unwrap_or_else(|err| eprintln!("{}: {}", sig_file, err));
@@ -91,14 +101,14 @@ fn run_delta(sig_file: String, new_file: String, delta_path: String) -> Result<(
     let mut sig_file = OpenOptions::new().read(true).open(&sig_file)?;
     let sig = read_signature(&mut sig_file)?;
 
-    let mut new_file = OpenOptions::new().read(true).open(&new_file)?;
+    let new_file = OpenOptions::new().read(true).open(&new_file)?;
     let mut delta_file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
         .open(&delta_path)?;
 
-    let res = delta(&sig, &mut new_file, &mut delta_file);
+    let res = delta(&sig, &mut BufReader::new(new_file), &mut delta_file);
     if let Err(err) = res {
         drop(delta_file);
         remove_file(&delta_path).unwrap_or_else(|err| eprintln!("{}: {}", delta_path, err));

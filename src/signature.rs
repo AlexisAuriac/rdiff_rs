@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::OpenOptions,
-    io::{BufWriter, Read, Write},
+    io::{Read, Write},
     path::Path,
     sync::{mpsc, Arc},
     thread,
@@ -12,7 +12,7 @@ use blake2::{digest::consts::U32, Blake2b, Digest};
 use md4::Md4;
 use object_pool::Pool;
 
-use crate::{buf_reader_with_retry::BufReaderWithRetry, rollsum::Rollsum};
+use crate::rollsum::Rollsum;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,10 +96,6 @@ where
         ));
     }
 
-    // dramatically improves perf for small block len
-    let mut input = BufReaderWithRetry::new(input);
-    let mut output = BufWriter::new(output);
-
     output.write(&sigtype.to_bytes())?;
     output.write(&block_len.to_be_bytes())?;
     output.write(&strong_len.to_be_bytes())?;
@@ -154,7 +150,7 @@ pub struct Signature {
 
 pub fn read_signature<I>(input: &mut I) -> Result<Signature, Error>
 where
-    I: std::io::Read,
+    I: Read,
 {
     let mut buf32 = [0u8; 4];
     input.read_exact(&mut buf32)?;
@@ -174,6 +170,8 @@ where
         let n = input.read(&mut buf32)?;
         if n == 0 {
             break;
+        } else if n < 4 {
+            return Err(anyhow!("unexpected EOF while reading weak sum"));
         }
         let weak_sum = u32::from_be_bytes(buf32);
 

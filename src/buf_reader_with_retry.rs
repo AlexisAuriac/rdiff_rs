@@ -17,10 +17,12 @@ impl<R: Read> BufReaderWithRetry<R> {
             inner: BufReader::with_capacity(cap, inner),
         }
     }
+}
 
-    // When BufReader runs out of data it will give us what it has alread buffered but won't get more
-    // data until the next read call, this doesn't work for us so we retry if it gives us a partial block
-    pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+// When BufReader runs out of data it will give us what it has alread buffered but won't get more
+// data until the next read call, this doesn't work for us so we retry if it gives us a partial block
+impl<R: Read> Read for BufReaderWithRetry<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut total = self.inner.read(buf)?;
         if total == 0 || total == buf.len() {
             return Ok(total);
