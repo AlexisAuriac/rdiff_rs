@@ -1,13 +1,16 @@
 use std::{
     collections::HashMap,
     fs::OpenOptions,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufWriter, Read, Write},
     path::Path,
+    sync::{mpsc, Arc},
+    thread,
 };
 
 use anyhow::{anyhow, Error};
 use blake2::{digest::consts::U32, Blake2b, Digest};
 use md4::Md4;
+use object_pool::Pool;
 
 use crate::rollsum::Rollsum;
 
@@ -82,8 +85,8 @@ pub fn signature<I, O>(
     sigtype: SigType,
 ) -> Result<(), Error>
 where
-    I: Read,
-    O: Write,
+    I: Read + Send,
+    O: Write + Send,
 {
     if strong_len > sigtype.sum_length() {
         return Err(anyhow!(
@@ -93,32 +96,48 @@ where
         ));
     }
 
-    // dramatically improves perf for small block len
-    let mut input = BufReader::new(input);
     let mut output = BufWriter::new(output);
 
     output.write(&sigtype.to_bytes())?;
     output.write(&block_len.to_be_bytes())?;
     output.write(&strong_len.to_be_bytes())?;
 
-    let mut block = vec![0u8; block_len as usize];
+    thread::scope(|s| -> Result<(), Error> {
+        let block_pool = Arc::new(Pool::new(100, || vec![0u8; block_len as usize]));
+        let (block_s, block_r) = mpsc::sync_channel(100);
 
-    loop {
-        let n = input.read(&mut block[..])?;
-        if n == 0 {
-            break;
+        s.spawn({
+            let pool = block_pool.clone();
+            move || -> Result<(), Error> {
+                loop {
+                    let (_, mut block) = pool.pull(|| vec![0u8; block_len as usize]).detach();
+
+                    let n = input.read(&mut block[..])?;
+                    if n == 0 {
+                        break;
+                    }
+                    block.truncate(n);
+
+                    block_s.send(block)?;
+                }
+
+                Ok(())
+            }
+        });
+
+        for block in block_r {
+            let weak = compute_weak_checksum(&block);
+            let strong = sigtype.strong_sum(&block, strong_len);
+
+            block_pool.attach(block);
+
+            output.write(&weak.to_be_bytes())?;
+            output.write(&strong)?;
         }
+        output.flush()?;
 
-        let data = &block[..n];
-
-        let weak = compute_weak_checksum(data);
-        output.write(&weak.to_be_bytes())?;
-
-        let strong = sigtype.strong_sum(data, strong_len);
-        output.write(&strong)?;
-    }
-
-    output.flush()?;
+        Ok(())
+    })?;
 
     Ok(())
 }
