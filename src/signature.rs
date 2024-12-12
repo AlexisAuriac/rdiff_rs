@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::OpenOptions,
-    io::{BufWriter, Write},
+    io::{BufReader, BufWriter, Read, Write},
     path::Path,
 };
 
@@ -82,8 +82,8 @@ pub fn signature<I, O>(
     sigtype: SigType,
 ) -> Result<(), Error>
 where
-    I: std::io::Read,
-    O: std::io::Write,
+    I: Read,
+    O: Write,
 {
     if strong_len > sigtype.sum_length() {
         return Err(anyhow!(
@@ -93,6 +93,8 @@ where
         ));
     }
 
+    // dramatically improves perf for small block len
+    let mut input = BufReader::new(input);
     let mut output = BufWriter::new(output);
 
     output.write(&sigtype.to_bytes())?;
