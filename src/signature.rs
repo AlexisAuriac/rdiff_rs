@@ -153,6 +153,8 @@ where
         let n = input.read(&mut buf32)?;
         if n == 0 {
             break;
+        } else if n < 4 {
+            return Err(anyhow!("unexpected EOF while reading weak sum"));
         }
         let weak_sum = u32::from_be_bytes(buf32);
 
