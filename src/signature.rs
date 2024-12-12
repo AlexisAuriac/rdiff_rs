@@ -1,5 +1,6 @@
 use std::{
-    collections::HashMap,
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap},
     fs::OpenOptions,
     io::{Read, Write},
     path::Path,
@@ -77,6 +78,33 @@ fn compute_weak_checksum(data: &[u8]) -> u32 {
     return sum.digest();
 }
 
+#[derive(Debug, Clone)]
+struct Sums {
+    pub idx: usize,
+    pub weak: u32,
+    pub strong: Vec<u8>,
+}
+
+impl PartialEq for Sums {
+    fn eq(&self, other: &Self) -> bool {
+        self.idx == other.idx
+    }
+}
+
+impl Eq for Sums {}
+
+impl PartialOrd for Sums {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.idx.partial_cmp(&other.idx)
+    }
+}
+
+impl Ord for Sums {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.idx.cmp(&other.idx)
+    }
+}
+
 pub fn signature<I, O>(
     input: &mut I,
     output: &mut O,
@@ -109,6 +137,7 @@ where
             let pool = block_pool.clone();
             let block_s = block_s.clone();
             move || -> Result<(), Error> {
+                let mut i = 0;
                 loop {
                     let (_, mut block) = pool.pull(|| vec![0u8; block_len as usize]).detach();
 
@@ -118,33 +147,66 @@ where
                     }
                     block.truncate(n);
 
-                    block_s.send(block)?;
+                    block_s.send((i, block))?;
+                    i += 1;
                 }
 
                 Ok(())
             }
         });
 
-        let hash_handle = s.spawn({
-            let pool = block_pool.clone();
-            let sums_s = sums_s.clone();
-            let block_r = block_r.clone();
-            move || {
-                for block in block_r {
-                    let weak = compute_weak_checksum(&block);
-                    let strong = sigtype.strong_sum(&block, strong_len);
+        let num_hash_threads = 14;
+        let mut hash_handles = Vec::with_capacity(num_hash_threads);
+        for _ in 0..num_hash_threads {
+            let handle = s.spawn({
+                let pool = block_pool.clone();
+                let sums_s = sums_s.clone();
+                let block_r = block_r.clone();
+                move || {
+                    for (i, block) in block_r {
+                        let weak = compute_weak_checksum(&block);
+                        let strong = sigtype.strong_sum(&block, strong_len);
 
-                    pool.attach(block);
+                        pool.attach(block);
 
-                    sums_s.send((weak, strong)).unwrap();
+                        sums_s
+                            .send(Sums {
+                                idx: i,
+                                weak,
+                                strong,
+                            })
+                            .unwrap();
+                    }
                 }
-            }
-        });
+            });
+            hash_handles.push(handle);
+        }
 
-        let worker_handle = s.spawn(|| -> Result<(), Error> {
-            for (weak, strong) in sums_r {
-                output.write(&weak.to_be_bytes())?;
-                output.write(&strong)?;
+        let writer_handle = s.spawn(|| -> Result<(), Error> {
+            let mut backlog = BinaryHeap::new();
+
+            let mut next = 0;
+            for sums in sums_r {
+                if sums.idx != next {
+                    backlog.push(Reverse(sums));
+                    continue;
+                }
+
+                output.write(&sums.weak.to_be_bytes())?;
+                output.write(&sums.strong)?;
+                next += 1;
+
+                loop {
+                    match backlog.peek() {
+                        Some(Reverse(sums)) if sums.idx == next => {
+                            output.write(&sums.weak.to_be_bytes())?;
+                            output.write(&sums.strong)?;
+                            next += 1;
+                            backlog.pop();
+                        }
+                        None | Some(_) => break,
+                    }
+                }
             }
 
             output.flush()?;
@@ -157,12 +219,12 @@ where
             .map_err(|err| anyhow!("reader: {:?}", err))??;
         drop(block_s);
 
-        hash_handle
-            .join()
-            .map_err(|err| anyhow!("reader: {:?}", err))?;
+        for handle in hash_handles {
+            handle.join().map_err(|err| anyhow!("reader: {:?}", err))?;
+        }
         drop(sums_s);
 
-        worker_handle
+        writer_handle
             .join()
             .map_err(|err| anyhow!("reader: {:?}", err))??;
 
