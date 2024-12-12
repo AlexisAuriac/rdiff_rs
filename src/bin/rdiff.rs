@@ -1,4 +1,4 @@
-use std::fs::OpenOptions;
+use std::fs::{remove_file, OpenOptions};
 
 use anyhow::Error;
 use clap::{Parser, Subcommand};
@@ -70,12 +70,24 @@ fn run_signature(
         .write(true)
         .open(&sig_file)?;
 
-    signature(&mut in_file, &mut out_file, block_size, sum_size, sigtype)?;
+    let res = signature(&mut in_file, &mut out_file, block_size, sum_size, sigtype);
+    if let Err(err) = res {
+        drop(out_file);
+        remove_file(&sig_file).unwrap_or_else(|err| eprintln!("{}: {}", sig_file, err));
+        return Err(err);
+    }
+
+    let res = out_file.sync_data();
+    if let Err(err) = res {
+        drop(out_file);
+        remove_file(&sig_file).unwrap_or_else(|err| eprintln!("{}: {}", sig_file, err));
+        return Err(err.into());
+    }
 
     Ok(())
 }
 
-fn run_delta(sig_file: String, new_file: String, delta_file: String) -> Result<(), Error> {
+fn run_delta(sig_file: String, new_file: String, delta_path: String) -> Result<(), Error> {
     let mut sig_file = OpenOptions::new().read(true).open(&sig_file)?;
     let sig = read_signature(&mut sig_file)?;
 
@@ -84,23 +96,47 @@ fn run_delta(sig_file: String, new_file: String, delta_file: String) -> Result<(
         .create(true)
         .truncate(true)
         .write(true)
-        .open(&delta_file)?;
+        .open(&delta_path)?;
 
-    delta(&sig, &mut new_file, &mut delta_file)?;
+    let res = delta(&sig, &mut new_file, &mut delta_file);
+    if let Err(err) = res {
+        drop(delta_file);
+        remove_file(&delta_path).unwrap_or_else(|err| eprintln!("{}: {}", delta_path, err));
+        return Err(err.into());
+    }
+
+    let res = delta_file.sync_data();
+    if let Err(err) = res {
+        drop(delta_file);
+        remove_file(&delta_path).unwrap_or_else(|err| eprintln!("{}: {}", delta_path, err));
+        return Err(err.into());
+    }
 
     Ok(())
 }
 
-fn run_patch(basis: String, delta_file: String, new_file: String) -> Result<(), Error> {
+fn run_patch(basis: String, delta_file: String, new_path: String) -> Result<(), Error> {
     let mut old_file = OpenOptions::new().read(true).open(&basis)?;
     let mut delta_file = OpenOptions::new().read(true).open(&delta_file)?;
     let mut new_file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
-        .open(&new_file)?;
+        .open(&new_path)?;
 
-    patch(&mut old_file, &mut delta_file, &mut new_file)?;
+    let res = patch(&mut old_file, &mut delta_file, &mut new_file);
+    if let Err(err) = res {
+        drop(new_file);
+        remove_file(&new_path).unwrap_or_else(|err| eprintln!("{}: {}", new_path, err));
+        return Err(err.into());
+    }
+
+    let res = new_file.sync_data();
+    if let Err(err) = res {
+        drop(new_file);
+        remove_file(&new_path).unwrap_or_else(|err| eprintln!("{}: {}", new_path, err));
+        return Err(err.into());
+    }
 
     Ok(())
 }
