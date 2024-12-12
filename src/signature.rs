@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fs::OpenOptions, path::Path};
+use std::{
+    collections::HashMap,
+    fs::OpenOptions,
+    io::{BufWriter, Write},
+    path::Path,
+};
 
 use anyhow::{anyhow, Error};
 use blake2::{digest::consts::U32, Blake2b, Digest};
@@ -95,6 +100,8 @@ where
             sigtype
         ));
     }
+
+    let mut output = BufWriter::new(output);
 
     output.write(&sigtype.to_bytes())?;
     output.write(&block_len.to_be_bytes())?;
