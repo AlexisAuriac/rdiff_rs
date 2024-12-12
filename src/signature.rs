@@ -12,7 +12,7 @@ use blake2::{digest::consts::U32, Blake2b, Digest};
 use md4::Md4;
 use object_pool::Pool;
 
-use crate::rollsum::Rollsum;
+use crate::{buf_reader_with_retry::BufReaderWithRetry, rollsum::Rollsum};
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +96,8 @@ where
         ));
     }
 
+    // dramatically improves perf for small block len
+    let mut input = BufReaderWithRetry::new(input);
     let mut output = BufWriter::new(output);
 
     output.write(&sigtype.to_bytes())?;
