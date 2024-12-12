@@ -124,6 +124,8 @@ where
         output.write(&strong)?;
     }
 
+    output.flush()?;
+
     Ok(())
 }
 
