@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::OpenOptions,
-    io::{BufWriter, Read, Write},
+    io::{Read, Write},
     path::Path,
 };
 
@@ -9,7 +9,7 @@ use anyhow::{anyhow, Error};
 use blake2::{digest::consts::U32, Blake2b, Digest};
 use md4::Md4;
 
-use crate::{buf_reader_with_retry::BufReaderWithRetry, rollsum::Rollsum};
+use crate::rollsum::Rollsum;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,10 +92,6 @@ where
             sigtype
         ));
     }
-
-    // dramatically improves perf for small block len
-    let mut input = BufReaderWithRetry::new(input);
-    let mut output = BufWriter::new(output);
 
     output.write(&sigtype.to_bytes())?;
     output.write(&block_len.to_be_bytes())?;
