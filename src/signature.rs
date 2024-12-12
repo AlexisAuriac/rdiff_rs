@@ -133,7 +133,7 @@ pub struct Signature {
 
 pub fn read_signature<I>(input: &mut I) -> Result<Signature, Error>
 where
-    I: std::io::Read,
+    I: Read,
 {
     let mut buf32 = [0u8; 4];
     input.read_exact(&mut buf32)?;
