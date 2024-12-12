@@ -57,20 +57,12 @@ impl SigType {
             Self::Blake2B => {
                 let mut hasher = Blake2b256::new();
                 hasher.update(data);
-                hasher
-                    .finalize()
-                    .to_vec()
-                    .drain(..(strong_len as usize))
-                    .collect()
+                hasher.finalize()[..(strong_len as usize)].to_vec()
             }
             Self::Md4 => {
                 let mut hasher = Md4::new();
                 hasher.update(data);
-                hasher
-                    .finalize()
-                    .to_vec()
-                    .drain(..(strong_len as usize))
-                    .collect()
+                hasher.finalize()[..(strong_len as usize)].to_vec()
             }
         }
     }
