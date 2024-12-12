@@ -102,10 +102,12 @@ where
 
     thread::scope(|s| -> Result<(), Error> {
         let block_pool = Arc::new(Pool::new(100, || vec![0u8; block_len as usize]));
-        let (block_s, block_r) = mpsc::sync_channel(100);
+        let (block_s, block_r) = crossbeam_channel::bounded(100);
+        let (sums_s, sums_r) = mpsc::sync_channel(100);
 
-        s.spawn({
+        let reader_handle = s.spawn({
             let pool = block_pool.clone();
+            let block_s = block_s.clone();
             move || -> Result<(), Error> {
                 loop {
                     let (_, mut block) = pool.pull(|| vec![0u8; block_len as usize]).detach();
@@ -123,16 +125,46 @@ where
             }
         });
 
-        for block in block_r {
-            let weak = compute_weak_checksum(&block);
-            let strong = sigtype.strong_sum(&block, strong_len);
+        let hash_handle = s.spawn({
+            let pool = block_pool.clone();
+            let sums_s = sums_s.clone();
+            let block_r = block_r.clone();
+            move || {
+                for block in block_r {
+                    let weak = compute_weak_checksum(&block);
+                    let strong = sigtype.strong_sum(&block, strong_len);
 
-            block_pool.attach(block);
+                    pool.attach(block);
 
-            output.write(&weak.to_be_bytes())?;
-            output.write(&strong)?;
-        }
-        output.flush()?;
+                    sums_s.send((weak, strong)).unwrap();
+                }
+            }
+        });
+
+        let worker_handle = s.spawn(|| -> Result<(), Error> {
+            for (weak, strong) in sums_r {
+                output.write(&weak.to_be_bytes())?;
+                output.write(&strong)?;
+            }
+
+            output.flush()?;
+
+            Ok(())
+        });
+
+        reader_handle
+            .join()
+            .map_err(|err| anyhow!("reader: {:?}", err))??;
+        drop(block_s);
+
+        hash_handle
+            .join()
+            .map_err(|err| anyhow!("reader: {:?}", err))?;
+        drop(sums_s);
+
+        worker_handle
+            .join()
+            .map_err(|err| anyhow!("reader: {:?}", err))??;
 
         Ok(())
     })?;

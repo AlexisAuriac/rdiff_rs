@@ -8,5 +8,6 @@ anyhow = "1.0.94"
 base64 = "0.22.1"
 blake2 = "0.10.6"
 clap = { version = "4.5.23", features = ["derive"] }
+crossbeam-channel = "0.5.13"
 md4 = "0.10.2"
 object-pool = "0.6.0"
