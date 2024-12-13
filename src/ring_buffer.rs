@@ -6,40 +6,38 @@ pub struct RingBuffer {
     cursor: usize,
     written: usize,
     data: Vec<u8>,
-    out: Vec<u8>,
 }
 
 impl RingBuffer {
+    #[inline]
     pub fn new(size: usize) -> Self {
         RingBuffer {
             size,
             cursor: 0,
             written: 0,
             data: vec![0u8; size],
-            out: vec![0u8; size],
         }
     }
 
+    #[inline]
     pub fn total_written(&self) -> usize {
         self.written
     }
 
     pub fn as_bytes(&mut self) -> &[u8] {
-        if self.written >= self.size && self.cursor == 0 {
-            &self.data
-        } else if self.written > self.size {
-            let (left_data, right_data) = self.data.split_at(self.cursor);
-            let (left_out, right_out) = self.out.split_at_mut(self.size - self.cursor);
+        if self.written > self.size {
+            self.data.rotate_left(self.cursor);
+            self.cursor = 0;
+        }
 
-            left_out.copy_from_slice(right_data);
-            right_out.copy_from_slice(left_data);
-
-            &self.out
+        if self.written < self.size {
+            &self.data[..self.written]
         } else {
-            &self.data[..self.cursor]
+            &self.data
         }
     }
 
+    #[inline]
     pub fn reset(&mut self) {
         self.cursor = 0;
         self.written = 0;
@@ -74,6 +72,7 @@ impl RingBuffer {
         return n;
     }
 
+    #[inline]
     pub fn write_byte(&mut self, b: u8) {
         self.data[self.cursor] = b;
         self.cursor = (self.cursor + 1) % self.size;
@@ -87,6 +86,15 @@ impl RingBuffer {
             Some(self.data[(self.cursor + i) % self.size])
         } else {
             Some(self.data[i])
+        }
+    }
+
+    #[inline(never)]
+    pub fn front(&self) -> Option<u8> {
+        if self.written == 0 {
+            None
+        } else {
+            Some(self.data[self.cursor])
         }
     }
 }
