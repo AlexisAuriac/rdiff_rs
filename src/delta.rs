@@ -29,7 +29,6 @@ where
 
     output.write(&DELTA_MAGIC.to_be_bytes())?;
 
-    let mut prev_byte = 0u8;
     let mut m = Match::new(output, lit_buff);
 
     let mut weaksum = Rollsum::new();
@@ -44,18 +43,21 @@ where
         }
         let b = buf1[0];
 
-        if ring_buf.total_written() > 0 {
-            prev_byte = ring_buf.get(0).unwrap();
-        }
-        ring_buf.write_byte(b);
         weaksum.roll_in(b);
 
         if weaksum.count() < sig.block_len as usize {
+            ring_buf.write_byte(b);
             continue;
-        } else if weaksum.count() > sig.block_len as usize {
+        }
+
+        if weaksum.count() > sig.block_len as usize {
+            let prev_byte = ring_buf.front().unwrap_or(0);
+
             m.add(MatchKind::Literal, prev_byte as u64, 1)?;
             weaksum.roll_out(prev_byte);
         }
+
+        ring_buf.write_byte(b);
 
         let digest = weaksum.digest();
         if let Some(block_idx) = sig.weak2block.get(&digest) {
