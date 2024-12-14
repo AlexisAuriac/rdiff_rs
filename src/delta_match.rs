@@ -48,7 +48,7 @@ impl<O: Write> Match<O> {
             1 => self.output.write(&(d as u8).to_be_bytes())?,
             2 => self.output.write(&(d as u16).to_be_bytes())?,
             4 => self.output.write(&(d as u32).to_be_bytes())?,
-            8 => self.output.write(&(d as u64).to_be_bytes())?,
+            8 => self.output.write(&d.to_be_bytes())?,
             _ => unimplemented!(), // todo: fuck this
         };
 
@@ -85,7 +85,7 @@ impl<O: Write> Match<O> {
                     _ => unimplemented!(),
                 };
 
-                self.output.write(&(cmd as u8).to_be_bytes())?;
+                self.output.write_all(&(cmd as u8).to_be_bytes())?;
                 self.write(self.pos, pos_size)?;
                 self.write(self.len, len_size)?;
             }
@@ -98,9 +98,9 @@ impl<O: Write> Match<O> {
                     _ => unimplemented!(),
                 };
 
-                self.output.write(&(cmd as u8).to_be_bytes())?;
+                self.output.write_all(&(cmd as u8).to_be_bytes())?;
                 self.write(self.len, len_size)?;
-                self.output.write(&self.lit)?;
+                self.output.write_all(&self.lit)?;
                 self.lit.drain(..);
             }
         }
@@ -142,7 +142,7 @@ impl<O: Write> Match<O> {
     }
 
     pub fn end(mut self) -> Result<(), Error> {
-        self.output.write(&(Op::EndOp as u8).to_be_bytes())?;
+        self.output.write_all(&(Op::EndOp as u8).to_be_bytes())?;
         Ok(())
     }
 }

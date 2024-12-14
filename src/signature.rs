@@ -33,11 +33,11 @@ impl SigType {
         }
     }
 
-    pub fn from_str(s: &str) -> Result<Self, Error> {
+    pub fn try_from_str(s: &str) -> Result<Self, Error> {
         match s {
             "blake2" => Ok(SigType::Blake2B),
             "md4" => Ok(SigType::Md4),
-            _ => return Err(anyhow!("{}: invalid signature type", s)),
+            _ => Err(anyhow!("{}: invalid signature type", s)),
         }
     }
 
@@ -71,7 +71,7 @@ impl SigType {
 fn compute_weak_checksum(data: &[u8]) -> u32 {
     let mut sum = Rollsum::new();
     sum.update(data);
-    return sum.digest();
+    sum.digest()
 }
 
 pub fn signature<I, O>(
@@ -93,9 +93,9 @@ where
         ));
     }
 
-    output.write(&sigtype.to_bytes())?;
-    output.write(&block_len.to_be_bytes())?;
-    output.write(&strong_len.to_be_bytes())?;
+    output.write_all(&sigtype.to_bytes())?;
+    output.write_all(&block_len.to_be_bytes())?;
+    output.write_all(&strong_len.to_be_bytes())?;
 
     let mut block = vec![0u8; block_len as usize];
 
@@ -108,10 +108,10 @@ where
         let data = &block[..n];
 
         let weak = compute_weak_checksum(data);
-        output.write(&weak.to_be_bytes())?;
+        output.write_all(&weak.to_be_bytes())?;
 
         let strong = sigtype.strong_sum(data, strong_len);
-        output.write(&strong)?;
+        output.write_all(&strong)?;
     }
 
     output.flush()?;
@@ -188,7 +188,7 @@ mod tests {
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
                     let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
-                    let sigtype = SigType::from_str(sigtype)?;
+                    let sigtype = SigType::try_from_str(sigtype)?;
 
                     let old_data_path = PathBuf::from("testdata").join(name).with_extension("old");
                     let mut input = Cursor::new(fs::read(&old_data_path)?);

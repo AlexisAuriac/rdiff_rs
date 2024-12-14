@@ -11,11 +11,11 @@ const ROLLSUM_CHAR_OFFSET: u16 = 31;
 
 impl Rollsum {
     pub fn new() -> Self {
-        return Rollsum {
+        Rollsum {
             count: 0,
             s1: Wrapping(0),
             s2: Wrapping(0),
-        };
+        }
     }
 
     pub fn count(&self) -> usize {
@@ -57,13 +57,19 @@ impl Rollsum {
     }
 
     pub fn digest(&self) -> u32 {
-        return ((self.s2.0 as u32) << 16) | ((self.s1.0 as u32) & 0xffff);
+        ((self.s2.0 as u32) << 16) | ((self.s1.0 as u32) & 0xffff)
     }
 
     pub fn reset(&mut self) {
         self.count = 0;
         self.s1 = Wrapping(0);
         self.s2 = Wrapping(0);
+    }
+}
+
+impl Default for Rollsum {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

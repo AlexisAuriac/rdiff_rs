@@ -1,5 +1,7 @@
 // largely based on https://github.com/armon/circbuf
 
+use std::cmp::Ordering;
+
 #[derive(Debug)]
 pub struct RingBuffer {
     size: usize,
@@ -53,23 +55,25 @@ impl RingBuffer {
 
         let remain = self.size - self.cursor;
 
-        if remain == buf.len() {
-            self.data[self.cursor..].copy_from_slice(buf);
-        } else if remain > buf.len() {
-            let start = self.cursor;
-            let end = self.cursor + buf.len();
+        match remain.cmp(&buf.len()) {
+            Ordering::Equal => self.data[self.cursor..].copy_from_slice(buf),
+            Ordering::Greater => {
+                let start = self.cursor;
+                let end = self.cursor + buf.len();
 
-            self.data[start..end].copy_from_slice(buf);
-        } else {
-            let (left_out, right_out) = self.data.split_at_mut(self.cursor);
-            let (left_in, right_in) = buf.split_at(remain);
+                self.data[start..end].copy_from_slice(buf);
+            }
+            Ordering::Less => {
+                let (left_out, right_out) = self.data.split_at_mut(self.cursor);
+                let (left_in, right_in) = buf.split_at(remain);
 
-            right_out.copy_from_slice(left_in);
-            left_out[..buf.len() - remain].copy_from_slice(right_in);
+                right_out.copy_from_slice(left_in);
+                left_out[..buf.len() - remain].copy_from_slice(right_in);
+            }
         }
 
         self.cursor = (self.cursor + buf.len()) % self.size;
-        return n;
+        n
     }
 
     #[inline]

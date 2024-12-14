@@ -65,7 +65,7 @@ fn run_signature(
     sum_size: u32,
     hash: String,
 ) -> Result<(), Error> {
-    let sigtype = SigType::from_str(&hash)?;
+    let sigtype = SigType::try_from_str(&hash)?;
 
     let in_file = OpenOptions::new().read(true).open(&basis)?;
     let out_file = OpenOptions::new()
@@ -112,7 +112,7 @@ fn run_delta(sig_file: String, new_file: String, delta_path: String) -> Result<(
     if let Err(err) = res {
         drop(delta_file);
         remove_file(&delta_path).unwrap_or_else(|err| eprintln!("{}: {}", delta_path, err));
-        return Err(err.into());
+        return Err(err);
     }
 
     let res = delta_file.sync_data();
@@ -138,7 +138,7 @@ fn run_patch(basis: String, delta_file: String, new_path: String) -> Result<(), 
     if let Err(err) = res {
         drop(new_file);
         remove_file(&new_path).unwrap_or_else(|err| eprintln!("{}: {}", new_path, err));
-        return Err(err.into());
+        return Err(err);
     }
 
     let res = new_file.sync_data();

@@ -23,11 +23,11 @@ where
     I: Read,
     O: Write,
 {
-    if lit_buff.len() != 0 || lit_buff.capacity() != OUTPUT_BUFFER_SIZE {
+    if !lit_buff.is_empty() || lit_buff.capacity() != OUTPUT_BUFFER_SIZE {
         return Err(anyhow!("bad literal buffer"));
     }
 
-    output.write(&DELTA_MAGIC.to_be_bytes())?;
+    output.write_all(&DELTA_MAGIC.to_be_bytes())?;
 
     let mut m = Match::new(output, lit_buff);
 
@@ -67,7 +67,7 @@ where
 
         let digest = weaksum.digest();
         if let Some(block_idx) = sig.weak2block.get(&digest) {
-            let strong2 = sig.sigtype.strong_sum(&ring_buf.as_bytes(), sig.strong_len);
+            let strong2 = sig.sigtype.strong_sum(ring_buf.as_bytes(), sig.strong_len);
             if sig.strong_sigs[*block_idx as usize] == strong2 {
                 weaksum.reset();
                 ring_buf.reset();
@@ -96,5 +96,7 @@ where
     O: Write,
 {
     let buf = Vec::with_capacity(OUTPUT_BUFFER_SIZE);
-    return delta_buf(sig, input, output, buf);
+    delta_buf(sig, input, output, buf)?;
+
+    Ok(())
 }

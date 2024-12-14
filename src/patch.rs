@@ -94,7 +94,7 @@ mod tests {
                 #[test]
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
-                    SigType::from_str(sigtype)?;
+                    SigType::try_from_str(sigtype)?;
                     let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
 
                     let old_path = PathBuf::from("testdata").join(name).with_extension("old");
@@ -161,7 +161,7 @@ mod tests {
                 #[test]
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
-                    SigType::from_str(sigtype)?;
+                    SigType::try_from_str(sigtype)?;
                     let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
 
                     let sig_path = PathBuf::from("testdata")

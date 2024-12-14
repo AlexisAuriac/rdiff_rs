@@ -37,7 +37,7 @@ impl<R: Read> Read for BufReaderWithRetry<R> {
             total += n;
         }
 
-        return Ok(total);
+        Ok(total)
     }
 }
 
