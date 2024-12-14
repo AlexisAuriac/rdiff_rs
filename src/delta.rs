@@ -34,19 +34,25 @@ where
     let mut weaksum = Rollsum::new();
     let mut ring_buf = RingBuffer::new(sig.block_len as usize);
 
-    loop {
-        let mut buf1 = [0u8];
+    let mut buf = vec![0u8; sig.block_len as usize];
 
-        let n = input.read(&mut buf1[..])?;
+    loop {
+        let read_count = if weaksum.count() < sig.block_len as usize {
+            sig.block_len as usize - weaksum.count()
+        } else {
+            1
+        };
+
+        let n = input.read(&mut buf[..read_count])?;
         if n == 0 {
             break;
         }
-        let b = buf1[0];
+        let data = &buf[..n];
 
-        weaksum.roll_in(b);
+        weaksum.update(data);
 
         if weaksum.count() < sig.block_len as usize {
-            ring_buf.write_byte(b);
+            ring_buf.write(data);
             continue;
         }
 
@@ -57,7 +63,7 @@ where
             weaksum.roll_out(prev_byte);
         }
 
-        ring_buf.write_byte(b);
+        ring_buf.write(data);
 
         let digest = weaksum.digest();
         if let Some(block_idx) = sig.weak2block.get(&digest) {
