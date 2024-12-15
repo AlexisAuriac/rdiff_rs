@@ -1,8 +1,9 @@
 use std::io::Write;
 
-use anyhow::Error;
-
-use crate::op::{Op, OpArgLen};
+use crate::{
+    error::Error,
+    op::{Op, OpArgLen},
+};
 
 const OUTPUT_BUFFER_SIZE: u64 = 16 * 1024 * 1024;
 

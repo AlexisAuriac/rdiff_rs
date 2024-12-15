@@ -1,15 +1,14 @@
 use std::{
     collections::HashMap,
     fs::OpenOptions,
-    io::{Read, Write},
+    io::{self, Read, Write},
     path::Path,
 };
 
-use anyhow::{anyhow, Error};
 use blake2::{digest::consts::U32, Blake2b, Digest};
 use md4::Md4;
 
-use crate::rollsum::Rollsum;
+use crate::{error::Error, rollsum::Rollsum};
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +28,7 @@ impl SigType {
         match x {
             _ if x == SigType::Blake2B as u32 => Ok(SigType::Blake2B),
             _ if x == SigType::Md4 as u32 => Ok(SigType::Md4),
-            _ => Err(anyhow!("invalid signature type magic")),
+            _ => Err(Error::BadSigType(x)),
         }
     }
 
@@ -37,7 +36,7 @@ impl SigType {
         match s {
             "blake2" => Ok(SigType::Blake2B),
             "md4" => Ok(SigType::Md4),
-            _ => Err(anyhow!("{}: invalid signature type", s)),
+            _ => Err(Error::BadSigName(s.to_string())),
         }
     }
 
@@ -86,11 +85,7 @@ where
     O: Write,
 {
     if strong_len > sigtype.sum_length() {
-        return Err(anyhow!(
-            "invalid strong len {} for sigtype {:?}",
-            strong_len,
-            sigtype
-        ));
+        return Err(Error::BadStrongLen(strong_len));
     }
 
     output.write_all(&sigtype.to_bytes())?;
@@ -150,7 +145,7 @@ where
         if n == 0 {
             break;
         } else if n < 4 {
-            return Err(anyhow!("unexpected EOF while reading weak sum"));
+            return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
         }
         let weak_sum = u32::from_be_bytes(buf32);
 

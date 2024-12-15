@@ -4,11 +4,10 @@ use std::{
     path::Path,
 };
 
-use anyhow::Error;
-
 use crate::{
     buf_reader_with_retry::BufReaderWithRetry,
     delta::delta as io_delta,
+    error::Error,
     patch::patch as io_patch,
     signature::{read_signature, signature as io_signature, SigType},
 };

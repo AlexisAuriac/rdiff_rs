@@ -1,6 +1,6 @@
-use anyhow::Error;
 use clap::{Parser, Subcommand};
 use rdiff::{
+    error::Error,
     signature::SigType,
     whole::{delta, patch, signature},
 };

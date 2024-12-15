@@ -1,9 +1,8 @@
 use std::io::{copy, Read, Seek, SeekFrom, Write};
 
-use anyhow::{anyhow, Error};
-
 use crate::{
     delta::DELTA_MAGIC,
+    error::Error,
     op::{OpArgLen, OpKind, OP2CMD},
 };
 
@@ -46,7 +45,11 @@ where
     let magic = u32::from_be_bytes(magic_buf);
 
     if magic != DELTA_MAGIC {
-        return Err(anyhow!("bad magic"));
+        return Err(Error::BadMagic {
+            expect_name: "delta".to_string(),
+            expect_value: DELTA_MAGIC,
+            got: magic,
+        });
     }
 
     loop {
@@ -75,7 +78,7 @@ where
                 copy(&mut old.take(len), out)?;
             }
             OpKind::End => break,
-            _ => return Err(anyhow!("bogus command {:?}", cmd.kind)),
+            _ => return Err(Error::UnexpectedCommand(cmd.kind)),
         }
     }
 

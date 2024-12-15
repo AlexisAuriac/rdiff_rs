@@ -1,9 +1,8 @@
 use std::io::{Read, Write};
 
-use anyhow::{anyhow, Error};
-
 use crate::{
     delta_match::{Match, MatchKind},
+    error::Error,
     ring_buffer::RingBuffer,
     rollsum::Rollsum,
     signature::Signature,
@@ -13,7 +12,7 @@ const OUTPUT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
 pub const DELTA_MAGIC: u32 = 0x72730236;
 
-pub fn delta_buf<I, O>(
+fn delta_buf<I, O>(
     sig: &Signature,
     input: &mut I,
     output: &mut O,
@@ -23,9 +22,10 @@ where
     I: Read,
     O: Write,
 {
-    if !lit_buff.is_empty() || lit_buff.capacity() != OUTPUT_BUFFER_SIZE {
-        return Err(anyhow!("bad literal buffer"));
-    }
+    debug_assert!(
+        lit_buff.is_empty() && lit_buff.capacity() == OUTPUT_BUFFER_SIZE,
+        "bad literal buffer"
+    );
 
     output.write_all(&DELTA_MAGIC.to_be_bytes())?;
 

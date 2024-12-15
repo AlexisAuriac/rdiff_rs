@@ -45,7 +45,7 @@ impl<R: Read> Read for BufReaderWithRetry<R> {
 mod tests {
     use std::io::Cursor;
 
-    use anyhow::Error;
+    use crate::error::Error;
 
     use super::*;
 
