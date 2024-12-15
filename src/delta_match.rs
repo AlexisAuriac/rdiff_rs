@@ -45,12 +45,12 @@ impl<O: Write> Match<O> {
 
     pub fn write(&mut self, d: u64, size: u8) -> Result<(), Error> {
         match size {
-            1 => self.output.write(&(d as u8).to_be_bytes())?,
-            2 => self.output.write(&(d as u16).to_be_bytes())?,
-            4 => self.output.write(&(d as u32).to_be_bytes())?,
-            8 => self.output.write(&d.to_be_bytes())?,
+            1 => self.output.write_all(&(d as u8).to_be_bytes())?,
+            2 => self.output.write_all(&(d as u16).to_be_bytes())?,
+            4 => self.output.write_all(&(d as u32).to_be_bytes())?,
+            8 => self.output.write_all(&d.to_be_bytes())?,
             _ => unimplemented!(), // todo: fuck this
-        };
+        }
 
         Ok(())
     }
@@ -101,7 +101,7 @@ impl<O: Write> Match<O> {
                 self.output.write_all(&(cmd as u8).to_be_bytes())?;
                 self.write(self.len, len_size)?;
                 self.output.write_all(&self.lit)?;
-                self.lit.drain(..);
+                self.lit.truncate(0);
             }
         }
 
