@@ -65,10 +65,7 @@ where
         }
     }
 
-    for b in ring_buf.as_bytes() {
-        builder.add_byte(*b)?;
-    }
-
+    builder.add_bytes(ring_buf.as_bytes())?;
     builder.flush()?;
     builder.end()?;
 

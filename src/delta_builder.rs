@@ -150,18 +150,28 @@ impl<O: Write> DeltaBuilder<O> {
         Ok(())
     }
 
-    pub fn add_bytes(&mut self, buf: &[u8]) -> Result<(), Error> {
+    pub fn add_bytes(&mut self, mut buf: &[u8]) -> Result<(), Error> {
         if self.kind != DeltaSegmentKind::Literal {
             self.flush()?;
             self.kind = DeltaSegmentKind::Literal;
         }
 
-        self.lit.copy_from_slice(buf);
-        self.len += buf.len() as u64;
+        // make sure we don't go over the buffer capacity
+        let mut remain = self.lit.capacity() - self.lit.len();
+        while buf.len() > remain {
+            let (first, second) = buf.split_at(remain);
 
-        if self.len as usize >= OUTPUT_BUFFER_SIZE {
-            self.flush()?
+            self.lit.extend(first);
+            self.len += first.len() as u64;
+
+            self.flush()?;
+
+            buf = second;
+            remain = self.lit.capacity() - self.lit.len();
         }
+
+        self.lit.extend(buf);
+        self.len += buf.len() as u64;
 
         Ok(())
     }
