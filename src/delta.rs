@@ -1,35 +1,20 @@
 use std::io::{Read, Write};
 
 use crate::{
-    delta_match::{Match, MatchKind},
-    error::Error,
-    ring_buffer::RingBuffer,
-    rollsum::Rollsum,
+    delta_builder::DeltaBuilder, error::Error, ring_buffer::RingBuffer, rollsum::Rollsum,
     signature::Signature,
 };
 
-const OUTPUT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
-
 pub const DELTA_MAGIC: u32 = 0x72730236;
 
-fn delta_buf<I, O>(
-    sig: &Signature,
-    input: &mut I,
-    output: &mut O,
-    lit_buff: Vec<u8>,
-) -> Result<(), Error>
+pub fn delta<I, O>(sig: &Signature, input: &mut I, output: &mut O) -> Result<(), Error>
 where
     I: Read,
     O: Write,
 {
-    debug_assert!(
-        lit_buff.is_empty() && lit_buff.capacity() == OUTPUT_BUFFER_SIZE,
-        "bad literal buffer"
-    );
-
     output.write_all(&DELTA_MAGIC.to_be_bytes())?;
 
-    let mut m = Match::new(output, lit_buff);
+    let mut builder = DeltaBuilder::new(output);
 
     let mut weaksum = Rollsum::new();
     let mut ring_buf = RingBuffer::new(sig.block_len as usize);
@@ -59,7 +44,7 @@ where
         if weaksum.count() > sig.block_len as usize {
             let prev_byte = ring_buf.front().unwrap_or(0);
 
-            m.add(MatchKind::Literal, prev_byte as u64, 1)?;
+            builder.add_byte(prev_byte)?;
             weaksum.roll_out(prev_byte);
         }
 
@@ -71,8 +56,8 @@ where
             if sig.strong_sigs[*block_idx as usize] == strong2 {
                 weaksum.reset();
                 ring_buf.reset();
-                m.add(
-                    MatchKind::Copy,
+
+                builder.copy(
                     *block_idx as u64 * sig.block_len as u64,
                     sig.block_len as u64,
                 )?;
@@ -81,22 +66,11 @@ where
     }
 
     for b in ring_buf.as_bytes() {
-        m.add(MatchKind::Literal, *b as u64, 1)?;
+        builder.add_byte(*b)?;
     }
 
-    m.flush()?;
-    m.end()?;
-
-    Ok(())
-}
-
-pub fn delta<I, O>(sig: &Signature, input: &mut I, output: &mut O) -> Result<(), Error>
-where
-    I: Read,
-    O: Write,
-{
-    let buf = Vec::with_capacity(OUTPUT_BUFFER_SIZE);
-    delta_buf(sig, input, output, buf)?;
+    builder.flush()?;
+    builder.end()?;
 
     Ok(())
 }

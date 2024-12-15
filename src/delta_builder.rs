@@ -1,0 +1,173 @@
+use std::io::Write;
+
+use crate::{
+    error::Error,
+    op::{Op, OpArgLen},
+};
+
+const OUTPUT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+
+fn min_int_size(d: u64) -> OpArgLen {
+    if d >= 2u64.pow(32) {
+        OpArgLen::N8
+    } else if d >= 2u64.pow(16) {
+        OpArgLen::N4
+    } else if d >= 2u64.pow(8) {
+        OpArgLen::N2
+    } else {
+        OpArgLen::N1
+    }
+}
+
+fn copy_op_from_arg_size(arg1: OpArgLen, arg2: OpArgLen) -> Op {
+    match (arg1, arg2) {
+        (OpArgLen::N1, OpArgLen::N1) => Op::CopyN1N1,
+        (OpArgLen::N1, OpArgLen::N2) => Op::CopyN1N2,
+        (OpArgLen::N1, OpArgLen::N4) => Op::CopyN1N4,
+        (OpArgLen::N1, OpArgLen::N8) => Op::CopyN1N8,
+        (OpArgLen::N2, OpArgLen::N1) => Op::CopyN2N1,
+        (OpArgLen::N2, OpArgLen::N2) => Op::CopyN2N2,
+        (OpArgLen::N2, OpArgLen::N4) => Op::CopyN2N4,
+        (OpArgLen::N2, OpArgLen::N8) => Op::CopyN2N8,
+        (OpArgLen::N4, OpArgLen::N1) => Op::CopyN4N1,
+        (OpArgLen::N4, OpArgLen::N2) => Op::CopyN4N2,
+        (OpArgLen::N4, OpArgLen::N4) => Op::CopyN4N4,
+        (OpArgLen::N4, OpArgLen::N8) => Op::CopyN4N8,
+        (OpArgLen::N8, OpArgLen::N1) => Op::CopyN8N1,
+        (OpArgLen::N8, OpArgLen::N2) => Op::CopyN8N2,
+        (OpArgLen::N8, OpArgLen::N4) => Op::CopyN8N4,
+        (OpArgLen::N8, OpArgLen::N8) => Op::CopyN8N8,
+    }
+}
+
+fn literal_op_from_arg_size(arg: OpArgLen) -> Op {
+    match arg {
+        OpArgLen::N1 => Op::LiteralN1,
+        OpArgLen::N2 => Op::LiteralN2,
+        OpArgLen::N4 => Op::LiteralN4,
+        OpArgLen::N8 => Op::LiteralN8,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeltaSegmentKind {
+    Literal,
+    Copy,
+}
+
+pub struct DeltaBuilder<O> {
+    kind: DeltaSegmentKind,
+    pos: u64,
+    len: u64,
+    output: O,
+    lit: Vec<u8>,
+}
+
+impl<O: Write> DeltaBuilder<O> {
+    pub fn new(output: O) -> Self {
+        Self {
+            output,
+            lit: Vec::with_capacity(OUTPUT_BUFFER_SIZE),
+            kind: DeltaSegmentKind::Literal,
+            pos: 0,
+            len: 0,
+        }
+    }
+
+    fn write_op_arg(&mut self, d: u64, size: OpArgLen) -> Result<(), Error> {
+        match size {
+            OpArgLen::N1 => self.output.write_all(&(d as u8).to_be_bytes())?,
+            OpArgLen::N2 => self.output.write_all(&(d as u16).to_be_bytes())?,
+            OpArgLen::N4 => self.output.write_all(&(d as u32).to_be_bytes())?,
+            OpArgLen::N8 => self.output.write_all(&d.to_be_bytes())?,
+        }
+
+        Ok(())
+    }
+
+    pub fn flush(&mut self) -> Result<(), Error> {
+        if self.len == 0 {
+            return Ok(());
+        }
+
+        match self.kind {
+            DeltaSegmentKind::Copy => {
+                let pos_size = min_int_size(self.pos);
+                let len_size = min_int_size(self.len);
+                let op = copy_op_from_arg_size(pos_size, len_size);
+
+                self.output.write_all(&(op as u8).to_be_bytes())?;
+                self.write_op_arg(self.pos, pos_size)?;
+                self.write_op_arg(self.len, len_size)?;
+            }
+            DeltaSegmentKind::Literal => {
+                let len_size = min_int_size(self.len);
+                let op = literal_op_from_arg_size(len_size);
+
+                self.output.write_all(&(op as u8).to_be_bytes())?;
+                self.write_op_arg(self.len, len_size)?;
+                self.output.write_all(&self.lit)?;
+            }
+        }
+
+        self.pos = 0;
+        self.len = 0;
+        self.lit.truncate(0);
+
+        Ok(())
+    }
+
+    pub fn copy(&mut self, pos: u64, len: u64) -> Result<(), Error> {
+        if self.kind != DeltaSegmentKind::Copy {
+            self.flush()?;
+            self.kind = DeltaSegmentKind::Copy;
+        }
+
+        if self.pos + self.len != pos {
+            self.flush()?;
+            self.pos = pos;
+            self.len = len;
+        } else {
+            self.len += len;
+        }
+
+        Ok(())
+    }
+
+    pub fn add_byte(&mut self, b: u8) -> Result<(), Error> {
+        if self.kind != DeltaSegmentKind::Literal {
+            self.flush()?;
+            self.kind = DeltaSegmentKind::Literal;
+        }
+
+        self.lit.push(b);
+        self.len += 1;
+
+        if self.len as usize >= OUTPUT_BUFFER_SIZE {
+            self.flush()?
+        }
+
+        Ok(())
+    }
+
+    pub fn add_bytes(&mut self, buf: &[u8]) -> Result<(), Error> {
+        if self.kind != DeltaSegmentKind::Literal {
+            self.flush()?;
+            self.kind = DeltaSegmentKind::Literal;
+        }
+
+        self.lit.copy_from_slice(buf);
+        self.len += buf.len() as u64;
+
+        if self.len as usize >= OUTPUT_BUFFER_SIZE {
+            self.flush()?
+        }
+
+        Ok(())
+    }
+
+    pub fn end(mut self) -> Result<(), Error> {
+        self.output.write_all(&(Op::EndOp as u8).to_be_bytes())?;
+        Ok(())
+    }
+}
