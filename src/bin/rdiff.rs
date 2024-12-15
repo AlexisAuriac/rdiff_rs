@@ -1,15 +1,8 @@
-use std::{
-    fs::{remove_file, OpenOptions},
-    io::{BufReader, BufWriter},
-};
-
 use anyhow::Error;
 use clap::{Parser, Subcommand};
 use rdiff::{
-    buf_reader_with_retry::BufReaderWithRetry,
-    delta::delta,
-    patch::patch,
-    signature::{read_signature, signature, SigType},
+    signature::SigType,
+    whole::{delta, patch, signature},
 };
 
 #[derive(Debug, Subcommand)]
@@ -58,99 +51,6 @@ struct Cli {
     command: Command,
 }
 
-fn run_signature(
-    basis: String,
-    sig_file: String,
-    block_size: u32,
-    sum_size: u32,
-    hash: String,
-) -> Result<(), Error> {
-    let sigtype = SigType::try_from_str(&hash)?;
-
-    let in_file = OpenOptions::new().read(true).open(&basis)?;
-    let out_file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&sig_file)?;
-
-    let res = signature(
-        &mut BufReaderWithRetry::new(&in_file), // dramatically improves perf for small block len
-        &mut BufWriter::new(&out_file),
-        block_size,
-        sum_size,
-        sigtype,
-    );
-    if let Err(err) = res {
-        drop(out_file);
-        remove_file(&sig_file).unwrap_or_else(|err| eprintln!("{}: {}", sig_file, err));
-        return Err(err);
-    }
-
-    let res = out_file.sync_data();
-    if let Err(err) = res {
-        drop(out_file);
-        remove_file(&sig_file).unwrap_or_else(|err| eprintln!("{}: {}", sig_file, err));
-        return Err(err.into());
-    }
-
-    Ok(())
-}
-
-fn run_delta(sig_file: String, new_file: String, delta_path: String) -> Result<(), Error> {
-    let mut sig_file = OpenOptions::new().read(true).open(&sig_file)?;
-    let sig = read_signature(&mut sig_file)?;
-
-    let new_file = OpenOptions::new().read(true).open(&new_file)?;
-    let mut delta_file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&delta_path)?;
-
-    let res = delta(&sig, &mut BufReader::new(new_file), &mut delta_file);
-    if let Err(err) = res {
-        drop(delta_file);
-        remove_file(&delta_path).unwrap_or_else(|err| eprintln!("{}: {}", delta_path, err));
-        return Err(err);
-    }
-
-    let res = delta_file.sync_data();
-    if let Err(err) = res {
-        drop(delta_file);
-        remove_file(&delta_path).unwrap_or_else(|err| eprintln!("{}: {}", delta_path, err));
-        return Err(err.into());
-    }
-
-    Ok(())
-}
-
-fn run_patch(basis: String, delta_file: String, new_path: String) -> Result<(), Error> {
-    let mut old_file = OpenOptions::new().read(true).open(&basis)?;
-    let mut delta_file = OpenOptions::new().read(true).open(&delta_file)?;
-    let mut new_file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&new_path)?;
-
-    let res = patch(&mut old_file, &mut delta_file, &mut new_file);
-    if let Err(err) = res {
-        drop(new_file);
-        remove_file(&new_path).unwrap_or_else(|err| eprintln!("{}: {}", new_path, err));
-        return Err(err);
-    }
-
-    let res = new_file.sync_data();
-    if let Err(err) = res {
-        drop(new_file);
-        remove_file(&new_path).unwrap_or_else(|err| eprintln!("{}: {}", new_path, err));
-        return Err(err.into());
-    }
-
-    Ok(())
-}
-
 fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
@@ -161,17 +61,20 @@ fn main() -> Result<(), Error> {
             block_size,
             sum_size,
             hash,
-        } => run_signature(basis, sig_file, block_size, sum_size, hash)?,
+        } => {
+            let sigtype = SigType::try_from_str(&hash)?;
+            signature(basis, sig_file, block_size, sum_size, sigtype)?
+        }
         Command::Delta {
             signature: sig_file,
             new_file,
-            delta,
-        } => run_delta(sig_file, new_file, delta)?,
+            delta: delta_file,
+        } => delta(sig_file, new_file, delta_file)?,
         Command::Patch {
             basis,
             delta: delta_file,
             new_file,
-        } => run_patch(basis, delta_file, new_file)?,
+        } => patch(basis, delta_file, new_file)?,
     }
 
     Ok(())

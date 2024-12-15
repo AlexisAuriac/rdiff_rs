@@ -1,0 +1,121 @@
+use std::{
+    fs::{remove_file, OpenOptions},
+    io::{BufReader, BufWriter},
+    path::Path,
+};
+
+use anyhow::Error;
+
+use crate::{
+    buf_reader_with_retry::BufReaderWithRetry,
+    delta::delta as io_delta,
+    patch::patch as io_patch,
+    signature::{read_signature, signature as io_signature, SigType},
+};
+
+pub fn signature<P1, P2>(
+    basis: P1,
+    sig_file: P2,
+    block_size: u32,
+    sum_size: u32,
+    sigtype: SigType,
+) -> Result<(), Error>
+where
+    P1: AsRef<Path>,
+    P2: AsRef<Path>,
+{
+    let in_file = OpenOptions::new().read(true).open(&basis)?;
+    let out_file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&sig_file)?;
+
+    let res = io_signature(
+        &mut BufReaderWithRetry::new(&in_file), // dramatically improves perf for small block len
+        &mut BufWriter::new(&out_file),
+        block_size,
+        sum_size,
+        sigtype,
+    );
+    if let Err(err) = res {
+        drop(out_file);
+        remove_file(&sig_file).unwrap_or_else(|err| eprintln!("{:?}: {}", sig_file.as_ref(), err));
+        return Err(err);
+    }
+
+    let res = out_file.sync_data();
+    if let Err(err) = res {
+        drop(out_file);
+        remove_file(&sig_file).unwrap_or_else(|err| eprintln!("{:?}: {}", sig_file.as_ref(), err));
+        return Err(err.into());
+    }
+
+    Ok(())
+}
+
+pub fn delta<P1, P2, P3>(sig_file: P1, new_file: P2, delta_path: P3) -> Result<(), Error>
+where
+    P1: AsRef<Path>,
+    P2: AsRef<Path>,
+    P3: AsRef<Path>,
+{
+    let mut sig_file = OpenOptions::new().read(true).open(&sig_file)?;
+    let sig = read_signature(&mut sig_file)?;
+
+    let new_file = OpenOptions::new().read(true).open(&new_file)?;
+    let mut delta_file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&delta_path)?;
+
+    let res = io_delta(&sig, &mut BufReader::new(new_file), &mut delta_file);
+    if let Err(err) = res {
+        drop(delta_file);
+        remove_file(&delta_path)
+            .unwrap_or_else(|err| eprintln!("{:?}: {}", delta_path.as_ref(), err));
+        return Err(err);
+    }
+
+    let res = delta_file.sync_data();
+    if let Err(err) = res {
+        drop(delta_file);
+        remove_file(&delta_path)
+            .unwrap_or_else(|err| eprintln!("{:?}: {}", delta_path.as_ref(), err));
+        return Err(err.into());
+    }
+
+    Ok(())
+}
+
+pub fn patch<P1, P2, P3>(basis: P1, delta_file: P2, new_path: P3) -> Result<(), Error>
+where
+    P1: AsRef<Path>,
+    P2: AsRef<Path>,
+    P3: AsRef<Path>,
+{
+    let mut old_file = OpenOptions::new().read(true).open(&basis)?;
+    let mut delta_file = OpenOptions::new().read(true).open(&delta_file)?;
+    let mut new_file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&new_path)?;
+
+    let res = io_patch(&mut old_file, &mut delta_file, &mut new_file);
+    if let Err(err) = res {
+        drop(new_file);
+        remove_file(&new_path).unwrap_or_else(|err| eprintln!("{:?}: {}", new_path.as_ref(), err));
+        return Err(err);
+    }
+
+    let res = new_file.sync_data();
+    if let Err(err) = res {
+        drop(new_file);
+        remove_file(&new_path).unwrap_or_else(|err| eprintln!("{:?}: {}", new_path.as_ref(), err));
+        return Err(err.into());
+    }
+
+    Ok(())
+}

@@ -6,3 +6,4 @@ pub mod patch;
 pub mod ring_buffer;
 pub mod rollsum;
 pub mod signature;
+pub mod whole;
