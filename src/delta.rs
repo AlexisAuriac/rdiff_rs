@@ -5,16 +5,13 @@ use crate::{
     signature::Signature,
 };
 
-pub const DELTA_MAGIC: u32 = 0x72730236;
-
 pub fn delta<I, O>(sig: &Signature, input: &mut I, output: &mut O) -> Result<(), Error>
 where
     I: Read,
     O: Write,
 {
-    output.write_all(&DELTA_MAGIC.to_be_bytes())?;
-
     let mut builder = DeltaBuilder::new(output);
+    builder.write_magic()?;
 
     let mut weaksum = Rollsum::new();
     let mut ring_buf = RingBuffer::new(sig.block_len as usize);

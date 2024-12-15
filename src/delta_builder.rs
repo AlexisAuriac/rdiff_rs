@@ -5,6 +5,8 @@ use crate::{
     op::{Op, OpArgLen},
 };
 
+pub const DELTA_MAGIC: u32 = 0x72730236;
+
 const OUTPUT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
 fn min_int_size(d: u64) -> OpArgLen {
@@ -72,6 +74,11 @@ impl<O: Write> DeltaBuilder<O> {
             pos: 0,
             len: 0,
         }
+    }
+
+    pub fn write_magic(&mut self) -> Result<(), Error> {
+        self.output.write_all(&DELTA_MAGIC.to_be_bytes())?;
+        Ok(())
     }
 
     fn write_op_arg(&mut self, d: u64, size: OpArgLen) -> Result<(), Error> {
