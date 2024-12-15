@@ -2,19 +2,19 @@ use std::io::Write;
 
 use anyhow::Error;
 
-use crate::op::Op;
+use crate::op::{Op, OpArgLen};
 
 const OUTPUT_BUFFER_SIZE: u64 = 16 * 1024 * 1024;
 
-fn int_size(d: u64) -> u8 {
+fn int_size(d: u64) -> OpArgLen {
     if d >= 2u64.pow(32) {
-        8
+        OpArgLen::N8
     } else if d >= 2u64.pow(16) {
-        4
+        OpArgLen::N4
     } else if d >= 2u64.pow(8) {
-        2
+        OpArgLen::N2
     } else {
-        1
+        OpArgLen::N1
     }
 }
 
@@ -43,13 +43,12 @@ impl<O: Write> Match<O> {
         }
     }
 
-    pub fn write(&mut self, d: u64, size: u8) -> Result<(), Error> {
+    pub fn write(&mut self, d: u64, size: OpArgLen) -> Result<(), Error> {
         match size {
-            1 => self.output.write_all(&(d as u8).to_be_bytes())?,
-            2 => self.output.write_all(&(d as u16).to_be_bytes())?,
-            4 => self.output.write_all(&(d as u32).to_be_bytes())?,
-            8 => self.output.write_all(&d.to_be_bytes())?,
-            _ => unimplemented!(), // todo: fuck this
+            OpArgLen::N1 => self.output.write_all(&(d as u8).to_be_bytes())?,
+            OpArgLen::N2 => self.output.write_all(&(d as u16).to_be_bytes())?,
+            OpArgLen::N4 => self.output.write_all(&(d as u32).to_be_bytes())?,
+            OpArgLen::N8 => self.output.write_all(&d.to_be_bytes())?,
         }
 
         Ok(())
@@ -65,37 +64,35 @@ impl<O: Write> Match<O> {
 
         match self.kind {
             MatchKind::Copy => {
-                let cmd = match (pos_size, len_size) {
-                    (1, 1) => Op::CopyN1N1,
-                    (1, 2) => Op::CopyN1N2,
-                    (1, 4) => Op::CopyN1N4,
-                    (1, 8) => Op::CopyN1N8,
-                    (2, 1) => Op::CopyN2N1,
-                    (2, 2) => Op::CopyN2N2,
-                    (2, 4) => Op::CopyN2N4,
-                    (2, 8) => Op::CopyN2N8,
-                    (4, 1) => Op::CopyN4N1,
-                    (4, 2) => Op::CopyN4N2,
-                    (4, 4) => Op::CopyN4N4,
-                    (4, 8) => Op::CopyN4N8,
-                    (8, 1) => Op::CopyN8N1,
-                    (8, 2) => Op::CopyN8N2,
-                    (8, 4) => Op::CopyN8N4,
-                    (8, 8) => Op::CopyN8N8,
-                    _ => unimplemented!(),
+                let op = match (pos_size, len_size) {
+                    (OpArgLen::N1, OpArgLen::N1) => Op::CopyN1N1,
+                    (OpArgLen::N1, OpArgLen::N2) => Op::CopyN1N2,
+                    (OpArgLen::N1, OpArgLen::N4) => Op::CopyN1N4,
+                    (OpArgLen::N1, OpArgLen::N8) => Op::CopyN1N8,
+                    (OpArgLen::N2, OpArgLen::N1) => Op::CopyN2N1,
+                    (OpArgLen::N2, OpArgLen::N2) => Op::CopyN2N2,
+                    (OpArgLen::N2, OpArgLen::N4) => Op::CopyN2N4,
+                    (OpArgLen::N2, OpArgLen::N8) => Op::CopyN2N8,
+                    (OpArgLen::N4, OpArgLen::N1) => Op::CopyN4N1,
+                    (OpArgLen::N4, OpArgLen::N2) => Op::CopyN4N2,
+                    (OpArgLen::N4, OpArgLen::N4) => Op::CopyN4N4,
+                    (OpArgLen::N4, OpArgLen::N8) => Op::CopyN4N8,
+                    (OpArgLen::N8, OpArgLen::N1) => Op::CopyN8N1,
+                    (OpArgLen::N8, OpArgLen::N2) => Op::CopyN8N2,
+                    (OpArgLen::N8, OpArgLen::N4) => Op::CopyN8N4,
+                    (OpArgLen::N8, OpArgLen::N8) => Op::CopyN8N8,
                 };
 
-                self.output.write_all(&(cmd as u8).to_be_bytes())?;
+                self.output.write_all(&(op as u8).to_be_bytes())?;
                 self.write(self.pos, pos_size)?;
                 self.write(self.len, len_size)?;
             }
             MatchKind::Literal => {
                 let cmd = match len_size {
-                    1 => Op::LiteralN1,
-                    2 => Op::LiteralN2,
-                    4 => Op::LiteralN4,
-                    8 => Op::LiteralN8,
-                    _ => unimplemented!(),
+                    OpArgLen::N1 => Op::LiteralN1,
+                    OpArgLen::N2 => Op::LiteralN2,
+                    OpArgLen::N4 => Op::LiteralN4,
+                    OpArgLen::N8 => Op::LiteralN8,
                 };
 
                 self.output.write_all(&(cmd as u8).to_be_bytes())?;

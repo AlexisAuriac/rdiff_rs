@@ -4,35 +4,34 @@ use anyhow::{anyhow, Error};
 
 use crate::{
     delta::DELTA_MAGIC,
-    op::{OpKind, OP2CMD},
+    op::{OpArgLen, OpKind, OP2CMD},
 };
 
-fn read_param<I>(i: &mut I, size: u8) -> Result<i64, Error>
+fn read_param<I>(i: &mut I, size: OpArgLen) -> Result<i64, Error>
 where
     I: Read,
 {
     match size {
-        1 => {
+        OpArgLen::N1 => {
             let mut buf = [0u8; 1];
             i.read_exact(&mut buf)?;
             Ok(buf[0] as i64)
         }
-        2 => {
+        OpArgLen::N2 => {
             let mut buf = [0u8; 2];
             i.read_exact(&mut buf)?;
             Ok(u16::from_be_bytes(buf) as i64)
         }
-        4 => {
+        OpArgLen::N4 => {
             let mut buf = [0u8; 4];
             i.read_exact(&mut buf)?;
             Ok(u32::from_be_bytes(buf) as i64)
         }
-        8 => {
+        OpArgLen::N8 => {
             let mut buf = [0u8; 8];
             i.read_exact(&mut buf)?;
             Ok(u64::from_be_bytes(buf) as i64)
         }
-        _ => Ok(0),
     }
 }
 
@@ -56,21 +55,24 @@ where
         let op = op_buf[0];
         let cmd = &OP2CMD[op as usize];
 
-        let (param1, param2) = if cmd.len1 == 0 {
-            (cmd.immediate as i64, 0)
-        } else {
-            let param1 = read_param(delta, cmd.len1)?;
-            let param2 = read_param(delta, cmd.len2)?;
-            (param1, param2)
+        let (param1, param2) = match (cmd.len1, cmd.len2) {
+            (None, _) => (cmd.immediate as i64, 0),
+            (Some(len1), None) => (read_param(delta, len1)?, 0),
+            (Some(len1), Some(len2)) => (read_param(delta, len1)?, read_param(delta, len2)?),
         };
 
         match cmd.kind {
             OpKind::Literal => {
-                copy(&mut delta.take(param1 as u64), out)?;
+                let len = param1 as u64;
+
+                copy(&mut delta.take(len), out)?;
             }
             OpKind::Copy => {
-                old.seek(SeekFrom::Start(param1 as u64))?;
-                copy(&mut old.take(param2 as u64), out)?;
+                let pos = param1 as u64;
+                let len = param2 as u64;
+
+                old.seek(SeekFrom::Start(pos))?;
+                copy(&mut old.take(len), out)?;
             }
             OpKind::End => break,
             _ => return Err(anyhow!("bogus command {:?}", cmd.kind)),
