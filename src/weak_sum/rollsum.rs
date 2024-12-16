@@ -10,6 +10,7 @@ pub struct Rollsum {
 const ROLLSUM_CHAR_OFFSET: u16 = 31;
 
 impl Rollsum {
+    #[inline]
     pub fn new() -> Self {
         Rollsum {
             count: 0,
@@ -18,6 +19,7 @@ impl Rollsum {
         }
     }
 
+    #[inline]
     pub fn count(&self) -> usize {
         self.count
     }
@@ -38,28 +40,33 @@ impl Rollsum {
         self.count += l;
     }
 
+    #[inline]
     pub fn rotate(&mut self, outb: u8, inb: u8) {
         self.s1 += Wrapping(inb as u16) - Wrapping(outb as u16);
         self.s2 +=
             self.s1 - (Wrapping(self.count as u16) * Wrapping(outb as u16 + ROLLSUM_CHAR_OFFSET));
     }
 
+    #[inline]
     pub fn rollin(&mut self, inb: u8) {
         self.s1 += inb as u16 + ROLLSUM_CHAR_OFFSET;
         self.s2 += self.s1;
         self.count += 1;
     }
 
+    #[inline]
     pub fn rollout(&mut self, outb: u8) {
         self.s1 -= outb as u16 + ROLLSUM_CHAR_OFFSET;
         self.s2 -= Wrapping(self.count as u16) * Wrapping(outb as u16 + ROLLSUM_CHAR_OFFSET);
         self.count -= 1;
     }
 
+    #[inline]
     pub fn digest(&self) -> u32 {
         ((self.s2.0 as u32) << 16) | ((self.s1.0 as u32) & 0xffff)
     }
 
+    #[inline]
     pub fn reset(&mut self) {
         self.count = 0;
         self.s1 = Wrapping(0);
