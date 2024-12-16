@@ -89,7 +89,7 @@ where
 mod tests {
     use std::{fs, io::Cursor, path::PathBuf};
 
-    use crate::{delta::delta, signature::read_signature_file, signature::SigType};
+    use crate::{delta::delta, signature::read_signature_file, strong_sum::StrongType};
 
     use super::*;
 
@@ -99,7 +99,7 @@ mod tests {
                 #[test]
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
-                    SigType::try_from_str(sigtype)?;
+                    StrongType::try_from_str(sigtype)?;
                     let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
 
                     let old_path = PathBuf::from("testdata").join(name).with_extension("old");
@@ -166,7 +166,7 @@ mod tests {
                 #[test]
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
-                    SigType::try_from_str(sigtype)?;
+                    StrongType::try_from_str(sigtype)?;
                     let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
 
                     let sig_path = PathBuf::from("testdata")

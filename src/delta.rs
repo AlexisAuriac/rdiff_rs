@@ -1,8 +1,8 @@
 use std::io::{Read, Write};
 
 use crate::{
-    delta_builder::DeltaBuilder, error::Error, ring_buffer::RingBuffer, rollsum::Rollsum,
-    signature::Signature,
+    delta_builder::DeltaBuilder, error::Error, ring_buffer::RingBuffer, signature::Signature,
+    strong_sum::StrongSum, weak_sum::weak_sum::WeakSum,
 };
 
 pub fn delta<I, O>(sig: &Signature, input: &mut I, output: &mut O) -> Result<(), Error>
@@ -13,14 +13,16 @@ where
     let mut builder = DeltaBuilder::new(output);
     builder.write_magic()?;
 
-    let mut weaksum = Rollsum::new();
+    let mut weak = WeakSum::from_type(sig.sigtype.weak_type());
+    let mut strong = StrongSum::from_type(sig.sigtype.strong_type());
+
     let mut ring_buf = RingBuffer::new(sig.block_len as usize);
 
     let mut buf = vec![0u8; sig.block_len as usize];
 
     loop {
-        let read_count = if weaksum.count() < sig.block_len as usize {
-            sig.block_len as usize - weaksum.count()
+        let read_count = if weak.count() < sig.block_len as usize {
+            sig.block_len as usize - weak.count()
         } else {
             1
         };
@@ -31,27 +33,28 @@ where
         }
         let data = &buf[..n];
 
-        weaksum.update(data);
+        weak.update(data);
 
-        if weaksum.count() < sig.block_len as usize {
+        if weak.count() < sig.block_len as usize {
             ring_buf.write(data);
             continue;
         }
 
-        if weaksum.count() > sig.block_len as usize {
+        if weak.count() > sig.block_len as usize {
             let prev_byte = ring_buf.front().unwrap_or(0);
 
             builder.add_byte(prev_byte)?;
-            weaksum.roll_out(prev_byte);
+            weak.rollout(prev_byte);
         }
 
         ring_buf.write(data);
 
-        let digest = weaksum.digest();
+        let digest = weak.digest();
         if let Some(block_idx) = sig.weak2block.get(&digest) {
-            let strong2 = sig.sigtype.strong_sum(ring_buf.as_bytes(), sig.strong_len);
-            if sig.strong_sigs[*block_idx as usize] == strong2 {
-                weaksum.reset();
+            strong.update(ring_buf.as_bytes());
+            let strong_sum = strong.finalize_reset(sig.strong_len);
+            if sig.strong_sigs[*block_idx as usize] == strong_sum {
+                weak.reset();
                 ring_buf.reset();
 
                 builder.copy(

@@ -44,13 +44,13 @@ impl Rollsum {
             self.s1 - (Wrapping(self.count as u16) * Wrapping(outb as u16 + ROLLSUM_CHAR_OFFSET));
     }
 
-    pub fn roll_in(&mut self, inb: u8) {
+    pub fn rollin(&mut self, inb: u8) {
         self.s1 += inb as u16 + ROLLSUM_CHAR_OFFSET;
         self.s2 += self.s1;
         self.count += 1;
     }
 
-    pub fn roll_out(&mut self, outb: u8) {
+    pub fn rollout(&mut self, outb: u8) {
         self.s1 -= outb as u16 + ROLLSUM_CHAR_OFFSET;
         self.s2 -= Wrapping(self.count as u16) * Wrapping(outb as u16 + ROLLSUM_CHAR_OFFSET);
         self.count -= 1;
@@ -87,25 +87,25 @@ mod tests {
     fn rollin_rollout() {
         let mut r = Rollsum::new();
 
-        r.roll_in(222);
+        r.rollin(222);
         assert_eq!(0x00FD00FD, r.digest());
-        r.roll_in(11);
+        r.rollin(11);
         assert_eq!(0x02240127, r.digest());
-        r.roll_in(0);
+        r.rollin(0);
         assert_eq!(0x036A0146, r.digest());
-        r.roll_in(13);
+        r.rollin(13);
         assert_eq!(0x04DC0172, r.digest());
-        r.roll_in(7);
+        r.rollin(7);
         assert_eq!(0x06740198, r.digest());
 
-        r.roll_out(222);
+        r.rollout(222);
         assert_eq!(0x0183009B, r.digest());
-        r.roll_out(11);
+        r.rollout(11);
         assert_eq!(0x00DB0071, r.digest());
-        r.roll_out(0);
+        r.rollout(0);
         assert_eq!(0x007E0052, r.digest());
 
-        r.roll_in(1);
+        r.rollin(1);
         assert_eq!(0x00F00072, r.digest());
     }
 
@@ -146,11 +146,11 @@ mod tests {
 
         let mut rk2 = Rollsum::new();
         for v in data2 {
-            rk2.roll_in(v);
+            rk2.rollin(v);
         }
         rk2.rotate(4, 43);
-        rk2.roll_out(22);
-        rk2.roll_in(101);
+        rk2.rollout(22);
+        rk2.rollin(101);
 
         assert_eq!(rk1.digest(), rk2.digest());
     }
@@ -158,11 +158,11 @@ mod tests {
     #[test]
     fn rotate_byte_subtraction_bug() {
         let mut rk1 = Rollsum::new();
-        rk1.roll_in(1);
+        rk1.rollin(1);
         assert_eq!(0x00200020, rk1.digest());
 
         let mut rk2 = Rollsum::new();
-        rk2.roll_in(2);
+        rk2.rollin(2);
         rk2.rotate(2, 1);
 
         assert_eq!(rk1.digest(), rk2.digest());

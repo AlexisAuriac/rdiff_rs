@@ -3,6 +3,7 @@
 
 use std::num::Wrapping;
 
+#[derive(Debug)]
 pub struct RabinKarp {
     count: usize,
     hash: Wrapping<u32>,
@@ -80,7 +81,7 @@ impl RabinKarp {
     }
 
     #[inline]
-    pub fn roll_out(&mut self, outb: u8) {
+    pub fn rollout(&mut self, outb: u8) {
         self.count -= 1;
         self.mult *= RABINKARP_INVM;
         self.hash -= self.mult * (Wrapping(outb as u32) + Wrapping(RABINKARP_ADJ));
@@ -162,13 +163,13 @@ mod tests {
         }
         assert_eq!(r.digest(), 0x7cf3fc07);
 
-        r.roll_out(4);
+        r.rollout(4);
         assert_eq!(r.count, 3);
         assert_eq!(r.digest(), 0xf284a77f);
 
-        r.roll_out(5);
-        r.roll_out(6);
-        r.roll_out(7);
+        r.rollout(5);
+        r.rollout(6);
+        r.rollout(7);
         assert_eq!(r.count, 0);
         assert_eq!(r.digest(), 0x00000001);
     }

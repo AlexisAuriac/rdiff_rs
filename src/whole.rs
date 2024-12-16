@@ -9,16 +9,18 @@ use crate::{
     delta::delta as io_delta,
     error::Error,
     patch::patch as io_patch,
-    signature::{read_signature, signature as io_signature, SigType},
+    signature::{read_signature, SignatureOptions},
 };
 
-pub fn signature<P1, P2>(
-    basis: P1,
-    sig_file: P2,
-    block_size: u32,
-    sum_size: u32,
-    sigtype: SigType,
-) -> Result<(), Error>
+pub fn signature<P1, P2>(basis: P1, sig_file: P2) -> Result<(), Error>
+where
+    P1: AsRef<Path>,
+    P2: AsRef<Path>,
+{
+    signature_opts(basis, sig_file, SignatureOptions::new())
+}
+
+pub fn signature_opts<P1, P2>(basis: P1, sig_file: P2, opts: SignatureOptions) -> Result<(), Error>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
@@ -30,12 +32,9 @@ where
         .write(true)
         .open(&sig_file)?;
 
-    let res = io_signature(
+    let res = opts.signature(
         &mut BufReaderWithRetry::new(&in_file), // dramatically improves perf for small block len
         &mut BufWriter::new(&out_file),
-        block_size,
-        sum_size,
-        sigtype,
     );
     if let Err(err) = res {
         drop(out_file);

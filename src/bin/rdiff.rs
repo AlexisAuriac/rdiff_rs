@@ -1,8 +1,10 @@
+use std::error::Error;
+
 use clap::{Parser, Subcommand};
 use rdiff::{
-    error::Error,
-    signature::SigType,
-    whole::{delta, patch, signature},
+    signature::SignatureOptions,
+    strong_sum::StrongType,
+    whole::{delta, patch, signature_opts},
 };
 
 #[derive(Debug, Subcommand)]
@@ -51,19 +53,36 @@ struct Cli {
     command: Command,
 }
 
-fn main() -> Result<(), Error> {
-    let cli = Cli::parse();
-
-    match cli.command {
+fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Box<dyn Error>> {
+    match cmd {
         Command::Signature {
-            basis,
-            signature: sig_file,
             block_size,
             sum_size,
             hash,
+            ..
         } => {
-            let sigtype = SigType::try_from_str(&hash)?;
-            signature(basis, sig_file, block_size, sum_size, sigtype)?
+            let sigtype = StrongType::try_from_str(hash)?;
+
+            Ok(SignatureOptions::new()
+                .block_len(*block_size)
+                .strong_len(*sum_size)
+                .strong_type(sigtype))
+        }
+        _ => Err("can't call this function for non-signature command".into()),
+    }
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let cli = Cli::parse();
+
+    match &cli.command {
+        Command::Signature {
+            basis,
+            signature: sig_file,
+            ..
+        } => {
+            let opts = signature_options_from_args(&cli.command)?;
+            signature_opts(basis, sig_file, opts)?
         }
         Command::Delta {
             signature: sig_file,

@@ -5,117 +5,111 @@ use std::{
     path::Path,
 };
 
-use blake2::{digest::consts::U32, Blake2b, Digest};
-use md4::Md4;
+use crate::{
+    error::Error,
+    signature_type::SignatureType,
+    strong_sum::{StrongSum, StrongType},
+    weak_sum::weak_sum::{WeakSum, WeakSumType},
+};
 
-use crate::{error::Error, rollsum::Rollsum};
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SigType {
-    Blake2B = 0x72730137,
-    // deprecated <https://github.com/librsync/librsync/issues/5>
-    Md4 = 0x72730136,
-}
-
-type Blake2b256 = Blake2b<U32>;
-
-const BLAKE2_SUM_LENGTH: u32 = 32;
-const MD4_SUM_LENGTH: u32 = 16;
-
-impl SigType {
-    pub fn from_u32(x: u32) -> Result<Self, Error> {
-        match x {
-            _ if x == SigType::Blake2B as u32 => Ok(SigType::Blake2B),
-            _ if x == SigType::Md4 as u32 => Ok(SigType::Md4),
-            _ => Err(Error::BadSigType(x)),
-        }
-    }
-
-    pub fn try_from_str(s: &str) -> Result<Self, Error> {
-        match s {
-            "blake2" => Ok(SigType::Blake2B),
-            "md4" => Ok(SigType::Md4),
-            _ => Err(Error::BadSigName(s.to_string())),
-        }
-    }
-
-    pub fn sum_length(&self) -> u32 {
-        match self {
-            Self::Blake2B => BLAKE2_SUM_LENGTH,
-            Self::Md4 => MD4_SUM_LENGTH,
-        }
-    }
-
-    pub fn to_bytes(self) -> [u8; 4] {
-        (self as u32).to_be_bytes()
-    }
-
-    pub fn strong_sum(self, data: &[u8], strong_len: u32) -> Vec<u8> {
-        match self {
-            Self::Blake2B => {
-                let mut hasher = Blake2b256::new();
-                hasher.update(data);
-                hasher.finalize()[..(strong_len as usize)].to_vec()
-            }
-            Self::Md4 => {
-                let mut hasher = Md4::new();
-                hasher.update(data);
-                hasher.finalize()[..(strong_len as usize)].to_vec()
-            }
-        }
-    }
-}
-
-fn compute_weak_checksum(data: &[u8]) -> u32 {
-    let mut sum = Rollsum::new();
-    sum.update(data);
-    sum.digest()
-}
-
-pub fn signature<I, O>(
-    input: &mut I,
-    output: &mut O,
+#[derive(Debug, Clone)]
+pub struct SignatureOptions {
     block_len: u32,
     strong_len: u32,
-    sigtype: SigType,
-) -> Result<(), Error>
+    strong_type: StrongType,
+    weak_type: WeakSumType,
+}
+
+impl SignatureOptions {
+    pub fn new() -> Self {
+        Self {
+            block_len: 2048,
+            strong_len: 32,
+            strong_type: StrongType::Blake2B,
+            // weak_type: WeaksumType::RabinKarp,
+            weak_type: WeakSumType::Rollsum,
+        }
+    }
+
+    pub fn block_len(mut self, block_len: u32) -> Self {
+        self.block_len = block_len;
+        self
+    }
+
+    pub fn strong_len(mut self, strong_len: u32) -> Self {
+        self.strong_len = strong_len;
+        self
+    }
+
+    pub fn strong_type(mut self, strong_type: StrongType) -> Self {
+        self.strong_type = strong_type;
+        self
+    }
+
+    pub fn weak_type(mut self, weak_type: WeakSumType) -> Self {
+        self.weak_type = weak_type;
+        self
+    }
+
+    pub fn signature<I, O>(self, input: &mut I, output: &mut O) -> Result<(), Error>
+    where
+        I: Read,
+        O: Write,
+    {
+        if self.strong_len > self.strong_type.sum_length() {
+            return Err(Error::BadStrongLen(self.strong_len));
+        }
+
+        let sigtype = SignatureType::new(self.weak_type, self.strong_type);
+
+        let mut weak = WeakSum::from_type(sigtype.weak_type());
+        let mut strong = StrongSum::from_type(sigtype.strong_type());
+
+        output.write_all(&(sigtype as u32).to_be_bytes())?;
+        output.write_all(&self.block_len.to_be_bytes())?;
+        output.write_all(&self.strong_len.to_be_bytes())?;
+
+        let mut block = vec![0u8; self.block_len as usize];
+
+        loop {
+            let n = input.read(&mut block[..])?;
+            if n == 0 {
+                break;
+            }
+
+            let data = &block[..n];
+
+            weak.update(data);
+            output.write_all(&weak.digest().to_be_bytes())?;
+            weak.reset();
+
+            strong.update(data);
+            let strong_sum = strong.finalize_reset(self.strong_len);
+            output.write_all(&strong_sum)?;
+        }
+
+        output.flush()?;
+
+        Ok(())
+    }
+}
+
+impl Default for SignatureOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn signature<I, O>(input: &mut I, output: &mut O) -> Result<(), Error>
 where
     I: Read,
     O: Write,
 {
-    if strong_len > sigtype.sum_length() {
-        return Err(Error::BadStrongLen(strong_len));
-    }
-
-    output.write_all(&sigtype.to_bytes())?;
-    output.write_all(&block_len.to_be_bytes())?;
-    output.write_all(&strong_len.to_be_bytes())?;
-
-    let mut block = vec![0u8; block_len as usize];
-
-    loop {
-        let n = input.read(&mut block[..])?;
-        if n == 0 {
-            break;
-        }
-
-        let data = &block[..n];
-
-        let weak = compute_weak_checksum(data);
-        output.write_all(&weak.to_be_bytes())?;
-
-        let strong = sigtype.strong_sum(data, strong_len);
-        output.write_all(&strong)?;
-    }
-
-    output.flush()?;
-
-    Ok(())
+    SignatureOptions::new().signature(input, output)
 }
 
 pub struct Signature {
-    pub sigtype: SigType,
+    pub sigtype: SignatureType,
     pub block_len: u32,
     pub strong_len: u32,
     pub strong_sigs: Vec<Vec<u8>>,
@@ -129,7 +123,7 @@ where
     let mut buf32 = [0u8; 4];
     input.read_exact(&mut buf32)?;
     let sigtype = u32::from_be_bytes(buf32);
-    let sigtype = SigType::from_u32(sigtype)?;
+    let sigtype = SignatureType::from_u32(sigtype)?;
 
     input.read_exact(&mut buf32)?;
     let block_len = u32::from_be_bytes(buf32);
@@ -174,6 +168,8 @@ pub fn read_signature_file(path: &Path) -> Result<Signature, Error> {
 mod tests {
     use std::{fs, io::Cursor, path::PathBuf};
 
+    use crate::strong_sum::StrongType;
+
     use super::*;
 
     macro_rules! test_signature {
@@ -181,16 +177,20 @@ mod tests {
             $(
                 #[test]
                 fn $name() -> Result<(), Error> {
-                    let (name, sigtype, block_len, strong_len) = $value;
-                    let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
-                    let sigtype = SigType::try_from_str(sigtype)?;
+                    let (name, strong, block_len, strong_len) = $value;
+                    let file_base_name = format!("{}-{}-{}-{}", name, strong, block_len, strong_len);
+                    let sigtype = StrongType::try_from_str(strong)?;
 
                     let old_data_path = PathBuf::from("testdata").join(name).with_extension("old");
                     let mut input = Cursor::new(fs::read(&old_data_path)?);
 
                     let mut output = Cursor::new(vec![]);
 
-                    signature(&mut input, &mut output, block_len, strong_len, sigtype)?;
+                    SignatureOptions::new()
+                        .block_len(block_len)
+                        .strong_len(strong_len)
+                        .strong_type(sigtype)
+                        .signature(&mut input, &mut output)?;
                     output.set_position(0);
                     let got_sig = read_signature(&mut output)?;
 
