@@ -4,6 +4,7 @@ pub mod delta_builder;
 pub mod error;
 pub mod op;
 pub mod patch;
+pub mod rabinkarp;
 pub mod ring_buffer;
 pub mod rollsum;
 pub mod signature;
