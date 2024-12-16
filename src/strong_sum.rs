@@ -20,7 +20,7 @@ impl StrongType {
         match s {
             "blake2" => Ok(StrongType::Blake2B),
             "md4" => Ok(StrongType::Md4),
-            _ => Err(Error::BadSigName(s.to_string())),
+            _ => Err(Error::BadHashName(s.to_string())),
         }
     }
 

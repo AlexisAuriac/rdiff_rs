@@ -24,7 +24,7 @@ static RABINKARP_MULT_POW2: [u32; 32] = [
 
 #[inline]
 fn rabinkarp_pow(mut n: u32) -> u32 {
-    let mut ans: u32 = 1;
+    let mut ans = 1;
 
     let mut i = 0;
     while n != 0 {

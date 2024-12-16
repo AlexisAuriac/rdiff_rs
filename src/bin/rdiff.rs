@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use rdiff::{
     signature::SignatureOptions,
     strong_sum::StrongType,
+    weak_sum::weak_sum::WeakSumType,
     whole::{delta, patch, signature_opts},
 };
 
@@ -25,6 +26,9 @@ enum Command {
         #[arg(short = 'H', long, default_value = "blake2")]
         /// Hash algorithm: blake2, md4
         hash: String,
+        #[arg(short = 'R', long, default_value = "rollsum")]
+        /// Rollsum algorithm: rabinkarp, rollsum
+        rollsum: String,
     },
     /// calculates the binary diff between old and new files
     Delta {
@@ -59,14 +63,17 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Box<dy
             block_size,
             sum_size,
             hash,
+            rollsum,
             ..
         } => {
-            let sigtype = StrongType::try_from_str(hash)?;
+            let weak = WeakSumType::try_from_str(rollsum)?;
+            let strong = StrongType::try_from_str(hash)?;
 
             Ok(SignatureOptions::new()
                 .block_len(*block_size)
                 .strong_len(*sum_size)
-                .strong_type(sigtype))
+                .weak_type(weak)
+                .strong_type(strong))
         }
         _ => Err("can't call this function for non-signature command".into()),
     }

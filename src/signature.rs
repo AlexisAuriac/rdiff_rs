@@ -26,7 +26,6 @@ impl SignatureOptions {
             block_len: 2048,
             strong_len: 32,
             strong_type: StrongType::Blake2B,
-            // weak_type: WeaksumType::RabinKarp,
             weak_type: WeakSumType::Rollsum,
         }
     }

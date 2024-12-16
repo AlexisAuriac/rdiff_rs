@@ -1,9 +1,21 @@
+use crate::error::Error;
+
 use super::{rabin_karp::RabinKarp, rollsum::Rollsum};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WeakSumType {
     Rollsum,
     RabinKarp,
+}
+
+impl WeakSumType {
+    pub fn try_from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "rabinkarp" => Ok(WeakSumType::RabinKarp),
+            "rollsum" => Ok(WeakSumType::Rollsum),
+            _ => Err(Error::BadRollsumName(s.to_string())),
+        }
+    }
 }
 
 #[derive(Debug)]

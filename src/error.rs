@@ -15,7 +15,8 @@ pub enum Error {
         got: u32,
     },
     BadSigType(u32),
-    BadSigName(String),
+    BadHashName(String),
+    BadRollsumName(String),
     BadStrongLen(u32),
     UnexpectedCommand(OpKind),
 }
@@ -36,7 +37,8 @@ impl Display for Error {
                 )
             }
             Error::BadSigType(got) => write!(f, "bad signature type: {:#x}", got),
-            Error::BadSigName(got) => write!(f, "bad signature name: {}", got),
+            Error::BadHashName(got) => write!(f, "bad hash name: {}", got),
+            Error::BadRollsumName(got) => write!(f, "bad rollsum name: {}", got),
             Error::BadStrongLen(got) => write!(f, "bad strong len: {}", got),
             Error::UnexpectedCommand(kind) => write!(f, "unexpected command: {:?}", kind),
         }
