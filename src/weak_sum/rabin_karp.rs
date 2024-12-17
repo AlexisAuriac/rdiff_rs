@@ -66,34 +66,24 @@ impl RabinKarp {
     // --- therefore
     // hash_n = hash_0 * m^n + sum(x_i * m^(n-i) for x in 0..n)
     // --> less math operations + we can precompute powers of m
-    pub fn update(&mut self, mut p: &[u8]) {
-        let n = p.len();
-
+    pub fn update(&mut self, p: &[u8]) {
         // divide the buffer into chunks so we can keep using precomputed value
         // even if p.len() is very large
-        // I would prefer to use Iter::chunks but it tanks perfs
-        let chunk_size = p.len().min(RABINKARP_MULT_POW.len());
-        let mut chunk = &p[..chunk_size];
-        p = &p[chunk_size..];
-
-        while !chunk.is_empty() {
+        // rchunks is a lot faster than chunks here, and we don't care about order
+        for chunk in p.rchunks(RABINKARP_MULT_POW.len()) {
             let mut m = 1;
-
             let mut tmp_hash = Wrapping(0);
+
             for (i, b) in chunk.iter().rev().enumerate() {
                 tmp_hash += Wrapping(*b as u32) * Wrapping(m);
                 m = RABINKARP_MULT_POW[i];
             }
 
             self.hash = self.hash * Wrapping(m) + tmp_hash;
-
-            let chunk_size = p.len().min(RABINKARP_MULT_POW.len());
-            chunk = &p[..chunk_size];
-            p = &p[chunk_size..];
         }
 
-        self.count += n;
-        self.mult *= rabinkarp_pow(n as u32);
+        self.count += p.len();
+        self.mult *= rabinkarp_pow(p.len() as u32);
     }
 
     #[inline]
