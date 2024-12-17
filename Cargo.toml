@@ -6,4 +6,10 @@ edition = "2021"
 [dependencies]
 blake2 = "0.10.6"
 clap = { version = "4.5.23", features = ["derive"] }
+criterion = "0.5.1"
 md4 = "0.10.2"
+rand = "0.8.5"
+
+[[bench]]
+name = "bench"
+harness = false
