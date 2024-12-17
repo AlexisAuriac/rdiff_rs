@@ -167,7 +167,7 @@ pub fn read_signature_file(path: &Path) -> Result<Signature, Error> {
 mod tests {
     use std::{fs, io::Cursor, path::PathBuf};
 
-    use crate::strong_sum::StrongType;
+    use crate::{strong_sum::StrongType, weak_sum::weak_sum::WeakSumType};
 
     use super::*;
 
@@ -176,9 +176,10 @@ mod tests {
             $(
                 #[test]
                 fn $name() -> Result<(), Error> {
-                    let (name, strong, block_len, strong_len) = $value;
+                    let (name, weak, strong, block_len, strong_len) = $value;
                     let file_base_name = format!("{}-{}-{}-{}", name, strong, block_len, strong_len);
-                    let sigtype = StrongType::try_from_str(strong)?;
+                    let weak_type = WeakSumType::try_from_str(weak)?;
+                    let strong_type = StrongType::try_from_str(strong)?;
 
                     let old_data_path = PathBuf::from("testdata").join(name).with_extension("old");
                     let mut input = Cursor::new(fs::read(&old_data_path)?);
@@ -188,7 +189,8 @@ mod tests {
                     SignatureOptions::new()
                         .block_len(block_len)
                         .strong_len(strong_len)
-                        .strong_type(sigtype)
+                        .weak_type(weak_type)
+                        .strong_type(strong_type)
                         .signature(&mut input, &mut output)?;
                     output.set_position(0);
                     let got_sig = read_signature(&mut output)?;
@@ -212,38 +214,38 @@ mod tests {
     }
 
     test_signature!(
-        signature_000_blake2_11_23: ("000", "blake2", 11, 23),
-        signature_000_blake2_512_32: ("000", "blake2", 512, 32),
-        signature_000_md4_256_7: ("000", "md4", 256, 7),
-        signature_001_blake2_512_32: ("001", "blake2", 512, 32),
-        signature_001_blake2_776_31: ("001", "blake2", 776, 31),
-        signature_001_md4_777_15: ("001", "md4", 777, 15),
-        signature_002_blake2_512_32: ("002", "blake2", 512, 32),
-        signature_002_blake2_431_19: ("002", "blake2", 431, 19),
-        signature_002_md4_128_16: ("002", "md4", 128, 16),
-        signature_003_blake2_512_32: ("003", "blake2", 512, 32),
-        signature_003_blake2_1024_13: ("003", "blake2", 1024, 13),
-        signature_003_md4_1024_13: ("003", "md4", 1024, 13),
-        signature_004_blake2_1024_28: ("004", "blake2", 1024, 28),
-        signature_004_blake2_2222_31: ("004", "blake2", 2222, 31),
-        signature_004_blake2_512_32: ("004", "blake2", 512, 32),
-        signature_005_blake2_512_32: ("005", "blake2", 512, 32),
-        signature_005_blake2_1000_18: ("005", "blake2", 1000, 18),
-        signature_005_md4_999_14: ("005", "md4", 999, 14),
-        signature_006_blake2_2_32: ("006", "blake2", 2, 32),
-        signature_007_blake2_5_32: ("007", "blake2", 5, 32),
-        signature_007_blake2_4_32: ("007", "blake2", 4, 32),
-        signature_007_blake2_3_32: ("007", "blake2", 3, 32),
-        signature_008_blake2_222_30: ("008", "blake2", 222, 30),
-        signature_008_blake2_512_32: ("008", "blake2", 512, 32),
-        signature_008_md4_111_11: ("008", "md4", 111, 11),
-        signature_009_blake2_2048_26: ("009", "blake2", 2048, 26),
-        signature_009_blake2_512_32: ("009", "blake2", 512, 32),
-        signature_009_md4_2033_15: ("009", "md4", 2033, 15),
-        signature_010_blake2_512_32: ("010", "blake2", 512, 32),
-        signature_010_blake2_7_6: ("010", "blake2", 7, 6),
-        signature_010_md4_4096_8: ("010", "md4", 4096, 8),
-        signature_011_blake2_3_32: ("011", "blake2", 3, 32),
-        signature_011_md4_3_9: ("011", "md4", 3, 9),
+        signature_000_rollsum_blake2_11_23: ("000", "rollsum", "blake2", 11, 23),
+        signature_000_rollsum_blake2_512_32: ("000", "rollsum", "blake2", 512, 32),
+        signature_000_rollsum_md4_256_7: ("000", "rollsum", "md4", 256, 7),
+        signature_001_rollsum_blake2_512_32: ("001", "rollsum", "blake2", 512, 32),
+        signature_001_rollsum_blake2_776_31: ("001", "rollsum", "blake2", 776, 31),
+        signature_001_rollsum_md4_777_15: ("001", "rollsum", "md4", 777, 15),
+        signature_002_rollsum_blake2_512_32: ("002", "rollsum", "blake2", 512, 32),
+        signature_002_rollsum_blake2_431_19: ("002", "rollsum", "blake2", 431, 19),
+        signature_002_rollsum_md4_128_16: ("002", "rollsum", "md4", 128, 16),
+        signature_003_rollsum_blake2_512_32: ("003", "rollsum", "blake2", 512, 32),
+        signature_003_rollsum_blake2_1024_13: ("003", "rollsum", "blake2", 1024, 13),
+        signature_003_rollsum_md4_1024_13: ("003", "rollsum", "md4", 1024, 13),
+        signature_004_rollsum_blake2_1024_28: ("004", "rollsum", "blake2", 1024, 28),
+        signature_004_rollsum_blake2_2222_31: ("004", "rollsum", "blake2", 2222, 31),
+        signature_004_rollsum_blake2_512_32: ("004", "rollsum", "blake2", 512, 32),
+        signature_005_rollsum_blake2_512_32: ("005", "rollsum", "blake2", 512, 32),
+        signature_005_rollsum_blake2_1000_18: ("005", "rollsum", "blake2", 1000, 18),
+        signature_005_rollsum_md4_999_14: ("005", "rollsum", "md4", 999, 14),
+        signature_006_rollsum_blake2_2_32: ("006", "rollsum", "blake2", 2, 32),
+        signature_007_rollsum_blake2_5_32: ("007", "rollsum", "blake2", 5, 32),
+        signature_007_rollsum_blake2_4_32: ("007", "rollsum", "blake2", 4, 32),
+        signature_007_rollsum_blake2_3_32: ("007", "rollsum", "blake2", 3, 32),
+        signature_008_rollsum_blake2_222_30: ("008", "rollsum", "blake2", 222, 30),
+        signature_008_rollsum_blake2_512_32: ("008", "rollsum", "blake2", 512, 32),
+        signature_008_rollsum_md4_111_11: ("008", "rollsum", "md4", 111, 11),
+        signature_009_rollsum_blake2_2048_26: ("009", "rollsum", "blake2", 2048, 26),
+        signature_009_rollsum_blake2_512_32: ("009", "rollsum", "blake2", 512, 32),
+        signature_009_rollsum_md4_2033_15: ("009", "rollsum", "md4", 2033, 15),
+        signature_010_rollsum_blake2_512_32: ("010", "rollsum", "blake2", 512, 32),
+        signature_010_rollsum_blake2_7_6: ("010", "rollsum", "blake2", 7, 6),
+        signature_010_rollsum_md4_4096_8: ("010", "rollsum", "md4", 4096, 8),
+        signature_011_rollsum_blake2_3_32: ("011", "rollsum", "blake2", 3, 32),
+        signature_011_rollsum_md4_3_9: ("011", "rollsum", "md4", 3, 9),
     );
 }
