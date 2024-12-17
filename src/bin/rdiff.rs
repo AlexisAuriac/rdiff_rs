@@ -26,7 +26,7 @@ enum Command {
         #[arg(short = 'H', long, default_value = "blake2")]
         /// Hash algorithm: blake2, md4
         hash: String,
-        #[arg(short = 'R', long, default_value = "rollsum")]
+        #[arg(short = 'R', long, default_value = "rabinkarp")]
         /// Rollsum algorithm: rabinkarp, rollsum
         rollsum: String,
     },
