@@ -3,24 +3,18 @@
 
 use std::num::Wrapping;
 
+use crate::weak_sum::rabin_karp_consts::RABINKARP_MULT_POW2;
+
+use super::rabin_karp_consts::{
+    RABINKARP_ADJ, RABINKARP_INVM, RABINKARP_MULT, RABINKARP_MULT_POW, RABINKARP_SEED,
+};
+
 #[derive(Debug)]
 pub struct RabinKarp {
     count: usize,
     hash: Wrapping<u32>,
     mult: Wrapping<u32>,
 }
-
-const RABINKARP_SEED: u32 = 1;
-const RABINKARP_MULT: u32 = 0x08104225;
-const RABINKARP_INVM: u32 = 0x98f009ad;
-const RABINKARP_ADJ: u32 = 0x08104224;
-
-static RABINKARP_MULT_POW2: [u32; 32] = [
-    0x08104225, 0xa5b71959, 0xf9c080f1, 0x7c71e2e1, 0x0bb409c1, 0x4dc72381, 0xd17a8701, 0x96260e01,
-    0x55101c01, 0x2d303801, 0x66a07001, 0xfe40e001, 0xc081c001, 0x91038001, 0x62070001, 0xc40e0001,
-    0x881c0001, 0x10380001, 0x20700001, 0x40e00001, 0x81c00001, 0x03800001, 0x07000001, 0x0e000001,
-    0x1c000001, 0x38000001, 0x70000001, 0xe0000001, 0xc0000001, 0x80000001, 0x00000001, 0x00000001,
-];
 
 #[inline]
 fn rabinkarp_pow(mut n: u32) -> u32 {
@@ -58,13 +52,48 @@ impl RabinKarp {
         self.count
     }
 
-    pub fn update(&mut self, p: &[u8]) {
-        for b in p {
-            self.hash = Wrapping(RABINKARP_MULT) * self.hash + Wrapping(*b as u32);
+    // hash_n = hash_n-1 * m + x_n-1 <--- simple but inefficient
+    // ---
+    // hash_1 = hash_0 * m + x0
+    // ---
+    // hash_2 = hash1 * m + x1
+    // hash_2 = (hash_0 * m + x0) * m + x1
+    // hash_2 = hash_0 * m^2 + x0 * m + x1
+    // ---
+    // hash_3 = hash2 * m + x2
+    // hash_3 = (hash_0 * m^2 + x0 * m + x1) * m + x2
+    // hash_3 = hash_0 * m^3 + x0 * m^2 + x1 * m + x2
+    // --- therefore
+    // hash_n = hash_0 * m^n + sum(x_i * m^(n-i) for x in 0..n)
+    // --> less math operations + we can precompute powers of m
+    pub fn update(&mut self, mut p: &[u8]) {
+        let n = p.len();
+
+        // divide the buffer into chunks so we can keep using precomputed value
+        // even if p.len() is very large
+        // I would prefer to use Iter::chunks but it tanks perfs
+        let chunk_size = p.len().min(RABINKARP_MULT_POW.len());
+        let mut chunk = &p[..chunk_size];
+        p = &p[chunk_size..];
+
+        while !chunk.is_empty() {
+            let mut m = 1;
+
+            let mut tmp_hash = Wrapping(0);
+            for (i, b) in chunk.iter().rev().enumerate() {
+                tmp_hash += Wrapping(*b as u32) * Wrapping(m);
+                m = RABINKARP_MULT_POW[i];
+            }
+
+            self.hash = self.hash * Wrapping(m) + tmp_hash;
+
+            let chunk_size = p.len().min(RABINKARP_MULT_POW.len());
+            chunk = &p[..chunk_size];
+            p = &p[chunk_size..];
         }
 
-        self.count += p.len();
-        self.mult *= rabinkarp_pow(p.len() as u32);
+        self.count += n;
+        self.mult *= rabinkarp_pow(n as u32);
     }
 
     #[inline]

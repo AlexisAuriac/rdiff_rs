@@ -33,7 +33,11 @@ where
         }
         let data = &buf[..n];
 
-        weak.update(data);
+        if n == 1 {
+            weak.rollin(data[0]);
+        } else {
+            weak.update(data);
+        }
 
         if weak.count() < sig.block_len as usize {
             ring_buf.write(data);
