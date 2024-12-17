@@ -18,7 +18,7 @@ pub struct RabinKarp {
 
 #[inline]
 fn rabinkarp_pow(mut n: u32) -> u32 {
-    let mut ans = 1;
+    let mut ans = Wrapping(1);
 
     let mut i = 0;
     while n != 0 {
@@ -34,7 +34,7 @@ fn rabinkarp_pow(mut n: u32) -> u32 {
         n >>= 1;
     }
 
-    ans
+    ans.0
 }
 
 impl RabinKarp {
