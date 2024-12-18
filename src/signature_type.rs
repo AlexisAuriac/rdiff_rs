@@ -1,4 +1,4 @@
-use crate::{error::Error, strong_sum::StrongType, weak_sum::weak_sum::WeakSumType};
+use crate::{error::Error, strong_sum::StrongType, weak_sum::WeakSumType};
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

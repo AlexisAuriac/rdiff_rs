@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     signature_type::SignatureType,
     strong_sum::{StrongSum, StrongType},
-    weak_sum::weak_sum::{WeakSum, WeakSumType},
+    weak_sum::{WeakSum, WeakSumType},
 };
 
 #[derive(Debug, Clone)]
@@ -167,7 +167,7 @@ pub fn read_signature_file(path: &Path) -> Result<Signature, Error> {
 mod tests {
     use std::{fs, io::Cursor, path::PathBuf};
 
-    use crate::{strong_sum::StrongType, weak_sum::weak_sum::WeakSumType};
+    use crate::{strong_sum::StrongType, weak_sum::WeakSumType};
 
     use super::*;
 

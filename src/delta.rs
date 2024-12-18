@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 
 use crate::{
     delta_builder::DeltaBuilder, error::Error, ring_buffer::RingBuffer, signature::Signature,
-    strong_sum::StrongSum, weak_sum::weak_sum::WeakSum,
+    strong_sum::StrongSum, weak_sum::WeakSum,
 };
 
 pub fn delta<I, O>(sig: &Signature, input: &mut I, output: &mut O) -> Result<(), Error>
