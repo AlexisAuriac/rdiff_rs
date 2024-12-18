@@ -34,51 +34,101 @@ where
     }
 }
 
+pub enum DeltaSegment {
+    Copy { pos: u64, len: u64 },
+    Literal { len: u64 },
+    End,
+}
+
+impl DeltaSegment {
+    pub fn op_kind(&self) -> OpKind {
+        match self {
+            Self::Copy { .. } => OpKind::Copy,
+            Self::Literal { .. } => OpKind::Literal,
+            Self::End => OpKind::End,
+        }
+    }
+}
+
+pub struct DeltaReader<I> {
+    input: I,
+}
+
+impl<I> DeltaReader<I>
+where
+    I: Read,
+{
+    pub fn new(mut input: I) -> Result<DeltaReader<I>, Error> {
+        let mut magic_buf = [0u8; 4];
+        input.read_exact(&mut magic_buf)?;
+        let magic = u32::from_be_bytes(magic_buf);
+
+        if magic != DELTA_MAGIC {
+            return Err(Error::BadMagic {
+                expect_name: "delta".to_string(),
+                expect_value: DELTA_MAGIC,
+                got: magic,
+            });
+        }
+
+        Ok(Self { input })
+    }
+
+    pub fn read_segment(&mut self) -> Result<DeltaSegment, Error> {
+        let mut op_buf = [0u8];
+        self.input.read_exact(&mut op_buf)?;
+        let op = op_buf[0];
+        let cmd = &OP2CMD[op as usize];
+
+        let (param1, param2) = match (cmd.len1, cmd.len2) {
+            (None, _) => (cmd.immediate as i64, 0),
+            (Some(len1), None) => (read_param(&mut self.input, len1)?, 0),
+            (Some(len1), Some(len2)) => (
+                read_param(&mut self.input, len1)?,
+                read_param(&mut self.input, len2)?,
+            ),
+        };
+
+        match cmd.kind {
+            OpKind::Literal => Ok(DeltaSegment::Literal { len: param1 as u64 }),
+            OpKind::Copy => Ok(DeltaSegment::Copy {
+                pos: param1 as u64,
+                len: param2 as u64,
+            }),
+            OpKind::End => Ok(DeltaSegment::End),
+            _ => Err(Error::UnexpectedCommand(cmd.kind)),
+        }
+    }
+
+    pub fn copy_literal<O>(&mut self, len: u64, out: &mut O) -> Result<(), Error>
+    where
+        O: Write,
+    {
+        copy(&mut self.input.by_ref().take(len), out)?;
+        Ok(())
+    }
+}
+
 pub fn patch<I, D, O>(old: &mut I, delta: &mut D, out: &mut O) -> Result<(), Error>
 where
     I: Read + Seek,
     D: Read,
     O: Write,
 {
-    let mut magic_buf = [0u8; 4];
-    delta.read_exact(&mut magic_buf)?;
-    let magic = u32::from_be_bytes(magic_buf);
-
-    if magic != DELTA_MAGIC {
-        return Err(Error::BadMagic {
-            expect_name: "delta".to_string(),
-            expect_value: DELTA_MAGIC,
-            got: magic,
-        });
-    }
+    let mut reader = DeltaReader::new(delta)?;
 
     loop {
-        let mut op_buf = [0u8];
-        delta.read_exact(&mut op_buf)?;
-        let op = op_buf[0];
-        let cmd = &OP2CMD[op as usize];
+        let segment = reader.read_segment()?;
 
-        let (param1, param2) = match (cmd.len1, cmd.len2) {
-            (None, _) => (cmd.immediate as i64, 0),
-            (Some(len1), None) => (read_param(delta, len1)?, 0),
-            (Some(len1), Some(len2)) => (read_param(delta, len1)?, read_param(delta, len2)?),
-        };
-
-        match cmd.kind {
-            OpKind::Literal => {
-                let len = param1 as u64;
-
-                copy(&mut delta.take(len), out)?;
+        match segment {
+            DeltaSegment::Literal { len } => {
+                reader.copy_literal(len, out)?;
             }
-            OpKind::Copy => {
-                let pos = param1 as u64;
-                let len = param2 as u64;
-
+            DeltaSegment::Copy { pos, len } => {
                 old.seek(SeekFrom::Start(pos))?;
                 copy(&mut old.take(len), out)?;
             }
-            OpKind::End => break,
-            _ => return Err(Error::UnexpectedCommand(cmd.kind)),
+            DeltaSegment::End => break,
         }
     }
 
