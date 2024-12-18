@@ -69,8 +69,10 @@ where
     P2: AsRef<Path>,
     P3: AsRef<Path>,
 {
-    let mut sig_file = OpenOptions::new().read(true).open(&sig_file)?;
-    let sig = read_signature(&mut sig_file)?;
+    let sig = {
+        let mut sig_file = OpenOptions::new().read(true).open(&sig_file)?;
+        read_signature(&mut sig_file)?
+    };
 
     let new_file = OpenOptions::new().read(true).open(&new_file)?;
     let mut delta_file = OpenOptions::new()
