@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 blake2 = "0.10.6"
+blake3 = { version = "1.5.5", features = ["digest"] }
 clap = { version = "4.5.23", features = ["derive"] }
 criterion = "0.5.1"
 md4 = "0.10.2"

@@ -24,7 +24,7 @@ enum Command {
         /// Set signature strength
         sum_size: u32,
         #[arg(short = 'H', long, default_value = "blake2")]
-        /// Hash algorithm: blake2, md4
+        /// Hash algorithm: blake3, blake2, md4
         hash: String,
         #[arg(short = 'R', long, default_value = "rabinkarp")]
         /// Rollsum algorithm: rabinkarp, rollsum

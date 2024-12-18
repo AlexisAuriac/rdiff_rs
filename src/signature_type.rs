@@ -3,6 +3,8 @@ use crate::{error::Error, strong_sum::StrongType, weak_sum::weak_sum::WeakSumTyp
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignatureType {
+    RkBlake3 = 0x72730148,
+    Blake3 = 0x72730138,
     RkBlake2B = 0x72730147, // default
     Blake2B = 0x72730137,
     // md4 is deprecated <https://github.com/librsync/librsync/issues/5>
@@ -13,6 +15,8 @@ pub enum SignatureType {
 impl SignatureType {
     pub fn from_u32(x: u32) -> Result<Self, Error> {
         match x {
+            _ if x == SignatureType::RkBlake3 as u32 => Ok(SignatureType::RkBlake3),
+            _ if x == SignatureType::Blake3 as u32 => Ok(SignatureType::Blake3),
             _ if x == SignatureType::RkBlake2B as u32 => Ok(SignatureType::RkBlake2B),
             _ if x == SignatureType::Blake2B as u32 => Ok(SignatureType::Blake2B),
             _ if x == SignatureType::RkMd4 as u32 => Ok(SignatureType::RkMd4),
@@ -27,18 +31,25 @@ impl SignatureType {
             (WeakSumType::Rollsum, StrongType::Blake2B) => SignatureType::Blake2B,
             (WeakSumType::RabinKarp, StrongType::Md4) => SignatureType::RkMd4,
             (WeakSumType::Rollsum, StrongType::Md4) => SignatureType::Md4,
+            (WeakSumType::RabinKarp, StrongType::Blake3) => SignatureType::RkBlake3,
+            (WeakSumType::Rollsum, StrongType::Blake3) => SignatureType::Blake3,
         }
     }
 
     pub fn weak_type(&self) -> WeakSumType {
         match self {
-            SignatureType::RkBlake2B | SignatureType::RkMd4 => WeakSumType::RabinKarp,
-            SignatureType::Blake2B | SignatureType::Md4 => WeakSumType::Rollsum,
+            SignatureType::RkBlake2B | SignatureType::RkMd4 | SignatureType::RkBlake3 => {
+                WeakSumType::RabinKarp
+            }
+            SignatureType::Blake2B | SignatureType::Md4 | SignatureType::Blake3 => {
+                WeakSumType::Rollsum
+            }
         }
     }
 
     pub fn strong_type(&self) -> StrongType {
         match self {
+            SignatureType::RkBlake3 | SignatureType::Blake3 => StrongType::Blake3,
             SignatureType::RkBlake2B | SignatureType::Blake2B => StrongType::Blake2B,
             SignatureType::RkMd4 | SignatureType::Md4 => StrongType::Md4,
         }
