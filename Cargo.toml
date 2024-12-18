@@ -4,12 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.94"
 blake2 = "0.10.6"
 blake3 = { version = "1.5.5", features = ["digest"] }
 clap = { version = "4.5.23", features = ["derive"] }
 criterion = "0.5.1"
 md4 = "0.10.2"
 rand = "0.8.5"
+which = "7.0.0"
+
+[[bin]]
+name = "tools"
+doc = false
 
 [[bench]]
 name = "bench"
