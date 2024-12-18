@@ -12,22 +12,28 @@ use crate::{
     signature::{read_signature, SignatureOptions},
 };
 
-pub fn signature<P1, P2>(basis: P1, sig_file: P2) -> Result<(), Error>
+pub fn signature<P1, P2>(basis: P1, sig_file: P2, force: bool) -> Result<(), Error>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
 {
-    signature_opts(basis, sig_file, SignatureOptions::new())
+    signature_opts(basis, sig_file, SignatureOptions::new(), force)
 }
 
-pub fn signature_opts<P1, P2>(basis: P1, sig_file: P2, opts: SignatureOptions) -> Result<(), Error>
+pub fn signature_opts<P1, P2>(
+    basis: P1,
+    sig_file: P2,
+    opts: SignatureOptions,
+    force: bool,
+) -> Result<(), Error>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
 {
     let in_file = OpenOptions::new().read(true).open(&basis)?;
     let out_file = OpenOptions::new()
-        .create(true)
+        .create(force)
+        .create_new(!force)
         .truncate(true)
         .write(true)
         .open(&sig_file)?;
@@ -52,7 +58,12 @@ where
     Ok(())
 }
 
-pub fn delta<P1, P2, P3>(sig_file: P1, new_file: P2, delta_path: P3) -> Result<(), Error>
+pub fn delta<P1, P2, P3>(
+    sig_file: P1,
+    new_file: P2,
+    delta_path: P3,
+    force: bool,
+) -> Result<(), Error>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
@@ -63,7 +74,8 @@ where
 
     let new_file = OpenOptions::new().read(true).open(&new_file)?;
     let mut delta_file = OpenOptions::new()
-        .create(true)
+        .create(force)
+        .create_new(!force)
         .truncate(true)
         .write(true)
         .open(&delta_path)?;
@@ -87,7 +99,7 @@ where
     Ok(())
 }
 
-pub fn patch<P1, P2, P3>(basis: P1, delta_file: P2, new_path: P3) -> Result<(), Error>
+pub fn patch<P1, P2, P3>(basis: P1, delta_file: P2, new_path: P3, force: bool) -> Result<(), Error>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
@@ -96,7 +108,8 @@ where
     let mut old_file = OpenOptions::new().read(true).open(&basis)?;
     let mut delta_file = OpenOptions::new().read(true).open(&delta_file)?;
     let mut new_file = OpenOptions::new()
-        .create(true)
+        .create(force)
+        .create_new(!force)
         .truncate(true)
         .write(true)
         .open(&new_path)?;

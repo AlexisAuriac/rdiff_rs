@@ -29,6 +29,9 @@ enum Command {
         #[arg(short = 'R', long, default_value = "rabinkarp")]
         /// Rollsum algorithm: rabinkarp, rollsum
         rollsum: String,
+        #[arg(short, long, default_value_t = false)]
+        /// overwrite existing files
+        force: bool,
     },
     /// calculates the binary diff between old and new files
     Delta {
@@ -38,6 +41,9 @@ enum Command {
         new_file: String,
         /// output delta file
         delta: String,
+        #[arg(short, long, default_value_t = false)]
+        /// overwrite existing files
+        force: bool,
     },
     /// uses the delta file and old file to produce the new file
     Patch {
@@ -47,6 +53,9 @@ enum Command {
         delta: String,
         /// output new file
         new_file: String,
+        #[arg(short, long, default_value_t = false)]
+        /// overwrite existing files
+        force: bool,
     },
 }
 
@@ -86,21 +95,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::Signature {
             basis,
             signature: sig_file,
+            force,
             ..
         } => {
             let opts = signature_options_from_args(&cli.command)?;
-            signature_opts(basis, sig_file, opts)?
+            signature_opts(basis, sig_file, opts, *force)?
         }
         Command::Delta {
             signature: sig_file,
             new_file,
             delta: delta_file,
-        } => delta(sig_file, new_file, delta_file)?,
+            force,
+        } => delta(sig_file, new_file, delta_file, *force)?,
         Command::Patch {
             basis,
             delta: delta_file,
             new_file,
-        } => patch(basis, delta_file, new_file)?,
+            force,
+        } => patch(basis, delta_file, new_file, *force)?,
     }
 
     Ok(())
