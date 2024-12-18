@@ -1,12 +1,10 @@
+mod whole;
+
 use std::error::Error;
 
 use clap::{Parser, Subcommand};
-use rdiff::{
-    signature::SignatureOptions,
-    strong_sum::StrongType,
-    weak_sum::weak_sum::WeakSumType,
-    whole::{delta, patch, signature_opts},
-};
+use rdiff::{signature::SignatureOptions, strong_sum::StrongType, weak_sum::weak_sum::WeakSumType};
+use whole::{delta, patch, signature_opts};
 
 #[derive(Debug, Subcommand)]
 /// binary diff utility
