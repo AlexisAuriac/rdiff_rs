@@ -107,6 +107,7 @@ where
     SignatureOptions::new().signature(input, output)
 }
 
+#[derive(Debug, Clone)]
 pub struct Signature {
     pub sigtype: SignatureType,
     pub block_len: u32,

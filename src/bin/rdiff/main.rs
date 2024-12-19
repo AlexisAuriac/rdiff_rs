@@ -1,7 +1,7 @@
+mod mock;
 mod whole;
 
-use std::error::Error;
-
+use anyhow::{anyhow, Error};
 use clap::{Parser, Subcommand};
 use rdiff::{signature::SignatureOptions, strong_sum::StrongType, weak_sum::WeakSumType};
 use whole::{delta, patch, signature_opts};
@@ -64,7 +64,7 @@ struct Cli {
     command: Command,
 }
 
-fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Box<dyn Error>> {
+fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Error> {
     match cmd {
         Command::Signature {
             block_size,
@@ -82,36 +82,125 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Box<dy
                 .weak_type(weak)
                 .strong_type(strong))
         }
-        _ => Err("can't call this function for non-signature command".into()),
+        _ => Err(anyhow!(
+            "can't call this function for non-signature command"
+        )),
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let cli = Cli::parse();
-
-    match &cli.command {
-        Command::Signature {
-            basis,
-            signature: sig_file,
-            force,
-            ..
-        } => {
-            let opts = signature_options_from_args(&cli.command)?;
-            signature_opts(basis, sig_file, opts, *force)?
+impl Cli {
+    pub fn run(self) -> Result<(), Error> {
+        match &self.command {
+            Command::Signature {
+                basis,
+                signature: sig_file,
+                force,
+                ..
+            } => {
+                let opts = signature_options_from_args(&self.command)?;
+                signature_opts(basis, sig_file, opts, *force)?
+            }
+            Command::Delta {
+                signature: sig_file,
+                new_file,
+                delta: delta_file,
+                force,
+            } => delta(sig_file, new_file, delta_file, *force)?,
+            Command::Patch {
+                basis,
+                delta: delta_file,
+                new_file,
+                force,
+            } => patch(basis, delta_file, new_file, *force)?,
         }
-        Command::Delta {
-            signature: sig_file,
-            new_file,
-            delta: delta_file,
-            force,
-        } => delta(sig_file, new_file, delta_file, *force)?,
-        Command::Patch {
-            basis,
-            delta: delta_file,
-            new_file,
-            force,
-        } => patch(basis, delta_file, new_file, *force)?,
+
+        Ok(())
+    }
+}
+
+fn main() -> Result<(), Error> {
+    let cli = Cli::parse();
+    cli.run()
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Error;
+
+    use super::*;
+
+    fn cli_from_argv<T: AsRef<str>>(argv: &[T]) -> Result<Cli, Error> {
+        let cli = Cli::try_parse_from(
+            argv.iter()
+                .map(|s| s.as_ref().to_string())
+                .collect::<Vec<_>>(),
+        )?;
+        Ok(cli)
     }
 
-    Ok(())
+    fn argv_format<T: AsRef<str>>(argv: &[T]) -> String {
+        argv.iter()
+            .map(|s| {
+                if s.as_ref().is_ascii() {
+                    s.as_ref().to_string()
+                } else {
+                    format!("'{}'", s.as_ref())
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn assert_cli_argv_err<T, U>(argv: &[T], msg: U)
+    where
+        T: AsRef<str>,
+        U: AsRef<str>,
+    {
+        assert!(
+            cli_from_argv(argv).is_err(),
+            "{}: `{}`",
+            msg.as_ref(),
+            argv_format(argv),
+        );
+    }
+
+    #[test]
+    fn basic_error_handling() -> Result<(), Error> {
+        assert_cli_argv_err(&["rdiff"], "no arguments should fail");
+        assert_cli_argv_err(&["rdiff", "a"], "bad subcommand should fail");
+
+        assert_cli_argv_err(&["rdiff", "signature"], "signature: 0 args should fail");
+        assert_cli_argv_err(
+            &["rdiff", "signature", "basis"],
+            "signature: missing signature should fail",
+        );
+
+        assert_cli_argv_err(
+            &["rdiff", "delta"],
+            "delta: missing sig, new, delta should fail",
+        );
+        assert_cli_argv_err(
+            &["rdiff", "delta", "sig"],
+            "delta: missing new, delta should fail",
+        );
+        assert_cli_argv_err(
+            &["rdiff", "delta", "sig", "new"],
+            "delta: missing delta should fail",
+        );
+
+        assert_cli_argv_err(
+            &["rdiff", "patch"],
+            "delta: missing old, delta, new should fail",
+        );
+        assert_cli_argv_err(
+            &["rdiff", "patch", "old"],
+            "delta: missing delta, new should fail",
+        );
+        assert_cli_argv_err(
+            &["rdiff", "patch", "old", "delta"],
+            "delta: missing new should fail",
+        );
+
+        Ok(())
+    }
 }

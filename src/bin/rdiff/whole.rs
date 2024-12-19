@@ -4,13 +4,13 @@ use std::{
     path::PathBuf,
 };
 
+use anyhow::Error;
 use rdiff::{
-    buf_reader_with_retry::BufReaderWithRetry,
-    delta::delta as io_delta,
-    error::Error,
-    patch::patch as io_patch,
-    signature::{read_signature, SignatureOptions},
+    buf_reader_with_retry::BufReaderWithRetry, delta::delta as io_delta, patch::patch as io_patch,
+    signature::SignatureOptions,
 };
+
+use crate::mock::read_signature;
 
 // largely copied from the library whole.rs
 // modified to accept "-" parameters (use stdin/stdout for input/output)
@@ -107,7 +107,7 @@ pub fn signature_opts(
         out_file
             .remove()
             .unwrap_or_else(|err| eprintln!("{:?}: {}", sig_file, err));
-        return Err(err);
+        return Err(err.into());
     }
 
     let res = out_file.flush();
@@ -135,7 +135,7 @@ pub fn delta(sig_file: &str, new_file: &str, delta_path: &str, force: bool) -> R
         delta_file
             .remove()
             .unwrap_or_else(|err| eprintln!("{:?}: {}", delta_path, err));
-        return Err(err);
+        return Err(err.into());
     }
 
     let res = delta_file.flush();
@@ -159,7 +159,7 @@ pub fn patch(basis: &str, delta_file: &str, new_path: &str, force: bool) -> Resu
         new_file
             .remove()
             .unwrap_or_else(|err| eprintln!("{:?}: {}", new_path, err));
-        return Err(err);
+        return Err(err.into());
     }
 
     let res = new_file.flush();
@@ -171,4 +171,76 @@ pub fn patch(basis: &str, delta_file: &str, new_path: &str, force: bool) -> Resu
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{env::temp_dir, fs::create_dir_all};
+
+    use clap::Parser;
+    use uuid::Uuid;
+
+    use crate::{mock::set_signature_fn, Cli};
+
+    use super::*;
+
+    fn cli_from_argv<T: AsRef<str>>(argv: &[T]) -> Result<Cli, Error> {
+        let cli = Cli::try_parse_from(
+            argv.iter()
+                .map(|s| s.as_ref().to_string())
+                .collect::<Vec<_>>(),
+        )?;
+        Ok(cli)
+    }
+
+    // fn argv_format<T: AsRef<str>>(argv: &[T]) -> String {
+    //     argv.iter()
+    //         .map(|s| {
+    //             if s.as_ref().is_ascii() {
+    //                 s.as_ref().to_string()
+    //             } else {
+    //                 format!("'{}'", s.as_ref())
+    //             }
+    //         })
+    //         .collect::<Vec<_>>()
+    //         .join(" ")
+    // }
+
+    fn unique_tmp_dir() -> PathBuf {
+        let uuid = Uuid::new_v4().to_string();
+        temp_dir().join("rdiff_tests").join(uuid)
+    }
+
+    #[test]
+    fn signature() -> Result<(), Error> {
+        let dir = unique_tmp_dir();
+        create_dir_all(&dir)?;
+
+        let old = {
+            let p = dir.join("old");
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&p)?;
+            p
+        };
+        let sig = dir.join("sig");
+
+        let cli = cli_from_argv(&[
+            "rdiff",
+            "signature",
+            old.to_str().unwrap(),
+            sig.to_str().unwrap(),
+        ])?;
+
+        set_signature_fn(Box::new(|opts, _, _| {
+            println!("here");
+            Ok(())
+        }));
+
+        cli.run()?;
+
+        Ok(())
+    }
 }
