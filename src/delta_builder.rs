@@ -188,3 +188,28 @@ impl<O: Write> DeltaBuilder<O> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_min_int_size() {
+        assert_eq!(min_int_size(0), OpArgLen::N1);
+        assert_eq!(min_int_size(1), OpArgLen::N1);
+        assert_eq!(min_int_size(1 << 7), OpArgLen::N1);
+        assert_eq!(min_int_size(u8::MAX as u64), OpArgLen::N1);
+
+        assert_eq!(min_int_size(u8::MAX as u64 + 1), OpArgLen::N2);
+        assert_eq!(min_int_size(1 << 8), OpArgLen::N2);
+        assert_eq!(min_int_size(u16::MAX as u64), OpArgLen::N2);
+
+        assert_eq!(min_int_size(u16::MAX as u64 + 1), OpArgLen::N4);
+        assert_eq!(min_int_size(1 << 31), OpArgLen::N4);
+        assert_eq!(min_int_size(u32::MAX as u64), OpArgLen::N4);
+
+        assert_eq!(min_int_size(u32::MAX as u64 + 1), OpArgLen::N8);
+        assert_eq!(min_int_size(1 << 32), OpArgLen::N8);
+        assert_eq!(min_int_size(u64::MAX), OpArgLen::N8);
+    }
+}
