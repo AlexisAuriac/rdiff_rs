@@ -166,7 +166,10 @@ where
     })
 }
 
-pub fn read_signature_file(path: &Path) -> Result<Signature, Error> {
+pub fn read_signature_file<P>(path: P) -> Result<Signature, Error>
+where
+    P: AsRef<Path>,
+{
     let mut f = OpenOptions::new().read(true).open(path)?;
     let input_size = f.metadata()?.len() as usize;
 
