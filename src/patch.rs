@@ -93,32 +93,41 @@ mod tests {
 
     use super::*;
 
+    fn generic_patch_test(
+        name: &str,
+        sigtype: &str,
+        block_len: u32,
+        strong_len: u32,
+    ) -> Result<(), Error> {
+        StrongType::try_from_str(sigtype)?;
+        let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
+
+        let old_path = PathBuf::from("testdata").join(name).with_extension("old");
+        let mut old_data = Cursor::new(fs::read(old_path)?);
+
+        let delta_path = PathBuf::from("testdata")
+            .join(&file_base_name)
+            .with_extension("delta");
+        let mut delta_data = Cursor::new(fs::read(delta_path)?);
+
+        let mut output = Cursor::new(vec![]);
+        patch(&mut old_data, &mut delta_data, &mut output)?;
+
+        let want_new_path = PathBuf::from("testdata").join(name).with_extension("new");
+        let want_new_data = fs::read(want_new_path)?;
+
+        assert_eq!(output.into_inner(), want_new_data);
+
+        Ok(())
+    }
+
     macro_rules! test_patch {
         ($($name:ident: $value:expr,)*) => {
             $(
                 #[test]
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
-                    StrongType::try_from_str(sigtype)?;
-                    let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
-
-                    let old_path = PathBuf::from("testdata").join(name).with_extension("old");
-                    let mut old_data = Cursor::new(fs::read(old_path)?);
-
-                    let delta_path = PathBuf::from("testdata")
-                        .join(&file_base_name)
-                        .with_extension("delta");
-                    let mut delta_data = Cursor::new(fs::read(delta_path)?);
-
-                    let mut output = Cursor::new(vec![]);
-                    patch(&mut old_data, &mut delta_data, &mut output)?;
-
-                    let want_new_path = PathBuf::from("testdata").join(&name).with_extension("new");
-                    let want_new_data = fs::read(want_new_path)?;
-
-                    assert_eq!(output.into_inner(), want_new_data);
-
-                    Ok(())
+                    generic_patch_test(name, sigtype, block_len, strong_len)
                 }
             )*
         };
@@ -160,36 +169,45 @@ mod tests {
         patch_011_md4_3_9: ("011", "md4", 3, 9),
     );
 
+    fn generic_delta_and_patch_test(
+        name: &str,
+        sigtype: &str,
+        block_len: u32,
+        strong_len: u32,
+    ) -> Result<(), Error> {
+        StrongType::try_from_str(sigtype)?;
+        let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
+
+        let sig_path = PathBuf::from("testdata")
+            .join(file_base_name)
+            .with_extension("signature");
+        let sig = read_signature_file(&sig_path)?;
+
+        let new_path = PathBuf::from("testdata").join(name).with_extension("new");
+        let mut new_data = Cursor::new(fs::read(new_path)?);
+
+        let mut delta_data = Cursor::new(vec![]);
+        delta(&sig, &mut new_data, &mut delta_data)?;
+
+        let old_path = PathBuf::from("testdata").join(name).with_extension("old");
+        let mut old_data = Cursor::new(fs::read(old_path)?);
+
+        delta_data.set_position(0);
+        let mut patched_data = Cursor::new(vec![]);
+        patch(&mut old_data, &mut delta_data, &mut patched_data)?;
+
+        assert_eq!(patched_data.into_inner(), new_data.into_inner());
+
+        Ok(())
+    }
+
     macro_rules! test_delta_and_patch {
         ($($name:ident: $value:expr,)*) => {
             $(
                 #[test]
                 fn $name() -> Result<(), Error> {
                     let (name, sigtype, block_len, strong_len) = $value;
-                    StrongType::try_from_str(sigtype)?;
-                    let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
-
-                    let sig_path = PathBuf::from("testdata")
-                        .join(file_base_name)
-                        .with_extension("signature");
-                    let sig = read_signature_file(&sig_path)?;
-
-                    let new_path = PathBuf::from("testdata").join(name).with_extension("new");
-                    let mut new_data = Cursor::new(fs::read(new_path)?);
-
-                    let mut delta_data = Cursor::new(vec![]);
-                    delta(&sig, &mut new_data, &mut delta_data)?;
-
-                    let old_path = PathBuf::from("testdata").join(name).with_extension("old");
-                    let mut old_data = Cursor::new(fs::read(old_path)?);
-
-                    delta_data.set_position(0);
-                    let mut patched_data = Cursor::new(vec![]);
-                    patch(&mut old_data, &mut delta_data, &mut patched_data)?;
-
-                    assert_eq!(patched_data.into_inner(), new_data.into_inner());
-
-                    Ok(())
+                    generic_delta_and_patch_test(name, sigtype, block_len, strong_len   )
                 }
             )*
         };
