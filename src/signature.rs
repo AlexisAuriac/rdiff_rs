@@ -115,6 +115,60 @@ pub struct Signature {
     pub weak2block: HashMap<u32, i32>,
 }
 
+pub struct Signature2 {
+    pub sigtype: SignatureType,
+    pub block_len: u32,
+    pub strong_len: u32,
+    pub strong_sigs: StrongSums,
+    pub weak2block: HashMap<u32, i32>,
+}
+
+pub struct StrongSums {
+    strong_len: u32,
+    data: Vec<u8>,
+}
+
+impl StrongSums {
+    pub fn new(strong_len: u32) -> Self {
+        Self::with_capacity(strong_len, 0)
+    }
+
+    pub fn with_capacity(strong_len: u32, nb_sums: usize) -> Self {
+        Self {
+            strong_len,
+            data: vec![0u8; strong_len as usize * nb_sums],
+        }
+    }
+
+    pub fn push(&mut self, sum: &[u8]) {
+        debug_assert!(
+            sum.len() == self.strong_len as usize,
+            "add sum with wrong size"
+        );
+
+        self.data.extend_from_slice(sum);
+    }
+
+    pub fn at(&self, block_idx: usize) -> &[u8] {
+        let start = block_idx * self.strong_len as usize;
+        let end = start + self.strong_len as usize;
+
+        &self.data[start..end]
+    }
+
+    pub fn sum_as_mut(&mut self, block_idx: usize) -> &mut [u8] {
+        let start = block_idx * self.strong_len as usize;
+        let end = start + self.strong_len as usize;
+
+        if end > self.data.len() {
+            self.data
+                .resize(self.data.len() + self.strong_len as usize, 0);
+        }
+
+        &mut self.data[start..end]
+    }
+}
+
 pub fn read_signature<I>(input: &mut I, size: Option<usize>) -> Result<Signature, Error>
 where
     I: Read,
@@ -166,11 +220,74 @@ where
     })
 }
 
-pub fn read_signature_file(path: &Path) -> Result<Signature, Error> {
+pub fn read_signature_file<P: AsRef<Path>>(path: P) -> Result<Signature, Error> {
     let mut f = OpenOptions::new().read(true).open(path)?;
     let input_size = f.metadata()?.len() as usize;
 
     read_signature(&mut f, Some(input_size))
+    // read_signature(&mut f, None)
+}
+
+pub fn read_signature2<I>(input: &mut I, size: Option<usize>) -> Result<Signature2, Error>
+where
+    I: Read,
+{
+    let mut buf32 = [0u8; 4];
+    input.read_exact(&mut buf32)?;
+    let sigtype = u32::from_be_bytes(buf32);
+    let sigtype = SignatureType::from_u32(sigtype)?;
+
+    input.read_exact(&mut buf32)?;
+    let block_len = u32::from_be_bytes(buf32);
+
+    input.read_exact(&mut buf32)?;
+    let strong_len = u32::from_be_bytes(buf32);
+
+    let input_size = size.unwrap_or(0);
+    let nb_blocks = if input_size < 12 {
+        // the input size is just wrong
+        0
+    } else {
+        (input_size - 12) / (strong_len as usize + 4)
+    };
+
+    dbg!(nb_blocks);
+    // let mut strong_sigs: Vec<Vec<u8>> = Vec::with_capacity(nb_blocks);
+    let mut strong_sigs = StrongSums::with_capacity(strong_len, nb_blocks);
+    let mut weak2block: HashMap<u32, i32> = HashMap::with_capacity(nb_blocks);
+
+    let mut i = 0;
+    loop {
+        let n = input.read(&mut buf32)?;
+        if n == 0 {
+            break;
+        } else if n < 4 {
+            return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
+        }
+
+        let weak_sum = u32::from_be_bytes(buf32);
+
+        input.read_exact(strong_sigs.sum_as_mut(i))?;
+        i += 1;
+
+        weak2block.insert(weak_sum, i as i32);
+    }
+
+    Ok(Signature2 {
+        sigtype,
+        block_len,
+        strong_len,
+        strong_sigs,
+        weak2block,
+    })
+}
+
+pub fn read_signature_file2<P: AsRef<Path>>(path: P) -> Result<Signature2, Error> {
+    let mut f = OpenOptions::new().read(true).open(path)?;
+    let input_size = f.metadata()?.len() as usize;
+
+    read_signature2(&mut f, Some(input_size))
+    // read_signature2(&mut f, None)
 }
 
 #[cfg(test)]

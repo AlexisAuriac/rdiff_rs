@@ -6,10 +6,10 @@ use std::{
 
 use crate::{
     buf_reader_with_retry::BufReaderWithRetry,
-    delta::delta as io_delta,
+    delta::delta2 as io_delta2,
     error::Error,
     patch::patch as io_patch,
-    signature::{read_signature, SignatureOptions},
+    signature::{read_signature, read_signature2, SignatureOptions},
 };
 
 pub fn signature<P1, P2>(basis: P1, sig_file: P2, force: bool) -> Result<(), Error>
@@ -73,7 +73,7 @@ where
         let mut sig_file = OpenOptions::new().read(true).open(&sig_file)?;
         let input_size = sig_file.metadata()?.len() as usize;
 
-        read_signature(&mut sig_file, Some(input_size))?
+        read_signature2(&mut sig_file, Some(input_size))?
     };
 
     let new_file = OpenOptions::new().read(true).open(&new_file)?;
@@ -84,7 +84,7 @@ where
         .write(true)
         .open(&delta_path)?;
 
-    let res = io_delta(&sig, &mut BufReader::new(new_file), &mut delta_file);
+    let res = io_delta2(&sig, &mut BufReader::new(new_file), &mut delta_file);
     if let Err(err) = res {
         drop(delta_file);
         remove_file(&delta_path)
