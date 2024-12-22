@@ -1,30 +1,14 @@
-use std::io::{self, Cursor, Read};
+mod utils;
+
+use std::io::{Cursor, Read};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use rand::{rngs::StdRng, RngCore, SeedableRng};
 use rdiff::{
     signature::{read_signature, signature},
     weak_sum::{rabin_karp::RabinKarp, rollsum::Rollsum},
 };
 
-struct RandReader {
-    rng: StdRng,
-}
-
-impl RandReader {
-    pub fn seed_from_u64(state: u64) -> Self {
-        Self {
-            rng: StdRng::seed_from_u64(state),
-        }
-    }
-}
-
-impl Read for RandReader {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.rng.fill_bytes(buf);
-        Ok(buf.len())
-    }
-}
+use utils::RandReader;
 
 fn weak_sum(c: &mut Criterion) {
     let mut rnd_reader = RandReader::seed_from_u64(0);
@@ -62,6 +46,12 @@ fn bench_read_signature(c: &mut Criterion) {
     c.bench_function("read signature with input size", |b| {
         b.iter(|| {
             read_signature(&mut Cursor::new(&output), Some(output.len())).unwrap();
+        })
+    });
+
+    c.bench_function("read signature without input size", |b| {
+        b.iter(|| {
+            read_signature(&mut Cursor::new(&output), None).unwrap();
         })
     });
 }
