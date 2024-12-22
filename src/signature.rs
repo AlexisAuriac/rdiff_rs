@@ -115,7 +115,7 @@ pub struct Signature {
     pub weak2block: HashMap<u32, i32>,
 }
 
-pub fn read_signature<I>(input: &mut I) -> Result<Signature, Error>
+pub fn read_signature<I>(input: &mut I, size: Option<usize>) -> Result<Signature, Error>
 where
     I: Read,
 {
@@ -130,8 +130,16 @@ where
     input.read_exact(&mut buf32)?;
     let strong_len = u32::from_be_bytes(buf32);
 
-    let mut strong_sigs: Vec<Vec<u8>> = vec![];
-    let mut weak2block: HashMap<u32, i32> = HashMap::new();
+    let input_size = size.unwrap_or(0);
+    let nb_blocks = if input_size < 12 {
+        // the input size is just wrong
+        0
+    } else {
+        (input_size - 12) / (strong_len as usize + 4)
+    };
+
+    let mut strong_sigs: Vec<Vec<u8>> = Vec::with_capacity(nb_blocks);
+    let mut weak2block: HashMap<u32, i32> = HashMap::with_capacity(nb_blocks);
 
     loop {
         let n = input.read(&mut buf32)?;
@@ -160,7 +168,9 @@ where
 
 pub fn read_signature_file(path: &Path) -> Result<Signature, Error> {
     let mut f = OpenOptions::new().read(true).open(path)?;
-    read_signature(&mut f)
+    let input_size = f.metadata()?.len() as usize;
+
+    read_signature(&mut f, Some(input_size))
 }
 
 #[cfg(test)]
@@ -171,43 +181,53 @@ mod tests {
 
     use super::*;
 
+    fn generic_test_signature(
+        name: &str,
+        weak: &str,
+        strong: &str,
+        block_len: u32,
+        strong_len: u32,
+    ) -> Result<(), Error> {
+        let file_base_name = format!("{}-{}-{}-{}", name, strong, block_len, strong_len);
+        let weak_type = WeakSumType::try_from_str(weak)?;
+        let strong_type = StrongType::try_from_str(strong)?;
+
+        let old_data_path = PathBuf::from("testdata").join(name).with_extension("old");
+        let mut input = Cursor::new(fs::read(&old_data_path)?);
+
+        let mut output = vec![];
+
+        SignatureOptions::new()
+            .block_len(block_len)
+            .strong_len(strong_len)
+            .weak_type(weak_type)
+            .strong_type(strong_type)
+            .signature(&mut input, &mut Cursor::new(&mut output))?;
+        let sig_size = output.len();
+        let got_sig = read_signature(&mut Cursor::new(&output), Some(sig_size))?;
+
+        let want_sig_path = PathBuf::from("testdata")
+            .join(file_base_name)
+            .with_extension("signature");
+        let want_sig_data = fs::read(want_sig_path)?;
+        let want_sig = read_signature(&mut Cursor::new(&want_sig_data), Some(want_sig_data.len()))?;
+
+        assert_eq!(got_sig.sigtype, want_sig.sigtype);
+        assert_eq!(got_sig.block_len, want_sig.block_len);
+        assert_eq!(got_sig.strong_len, want_sig.strong_len);
+
+        assert_eq!(output, want_sig_data);
+
+        Ok(())
+    }
+
     macro_rules! test_signature {
         ($($name:ident: $value:expr,)*) => {
             $(
                 #[test]
                 fn $name() -> Result<(), Error> {
                     let (name, weak, strong, block_len, strong_len) = $value;
-                    let file_base_name = format!("{}-{}-{}-{}", name, strong, block_len, strong_len);
-                    let weak_type = WeakSumType::try_from_str(weak)?;
-                    let strong_type = StrongType::try_from_str(strong)?;
-
-                    let old_data_path = PathBuf::from("testdata").join(name).with_extension("old");
-                    let mut input = Cursor::new(fs::read(&old_data_path)?);
-
-                    let mut output = Cursor::new(vec![]);
-
-                    SignatureOptions::new()
-                        .block_len(block_len)
-                        .strong_len(strong_len)
-                        .weak_type(weak_type)
-                        .strong_type(strong_type)
-                        .signature(&mut input, &mut output)?;
-                    output.set_position(0);
-                    let got_sig = read_signature(&mut output)?;
-
-                    let want_sig_path = PathBuf::from("testdata")
-                        .join(file_base_name)
-                        .with_extension("signature");
-                    let mut want_sig_data = Cursor::new(fs::read(want_sig_path)?);
-                    let want_sig = read_signature(&mut want_sig_data)?;
-
-                    assert_eq!(got_sig.sigtype, want_sig.sigtype);
-                    assert_eq!(got_sig.block_len, want_sig.block_len);
-                    assert_eq!(got_sig.strong_len, want_sig.strong_len);
-
-                    assert_eq!(output.into_inner(), want_sig_data.into_inner());
-
-                    Ok(())
+                    generic_test_signature(name, weak, strong, block_len, strong_len)
                 }
             )*
         };

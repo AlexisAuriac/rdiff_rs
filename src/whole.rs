@@ -71,7 +71,9 @@ where
 {
     let sig = {
         let mut sig_file = OpenOptions::new().read(true).open(&sig_file)?;
-        read_signature(&mut sig_file)?
+        let input_size = sig_file.metadata()?.len() as usize;
+
+        read_signature(&mut sig_file, Some(input_size))?
     };
 
     let new_file = OpenOptions::new().read(true).open(&new_file)?;

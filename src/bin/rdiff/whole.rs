@@ -121,10 +121,22 @@ pub fn signature_opts(
     Ok(())
 }
 
-pub fn delta(sig_file: &str, new_file: &str, delta_path: &str, force: bool) -> Result<(), Error> {
+pub fn delta(
+    sig_file: &str,
+    new_file: &str,
+    delta_path: &str,
+    force: bool,
+    input_size: Option<usize>,
+) -> Result<(), Error> {
     let sig = {
         let mut sig_file = FileOrStdin::new(sig_file)?;
-        read_signature(&mut sig_file)?
+        let input_size = match (input_size, &sig_file) {
+            (Some(size), _) => Some(size),
+            (None, FileOrStdin::File(file)) => Some(file.metadata()?.len() as usize),
+            (None, FileOrStdin::Stdin(_)) => None,
+        };
+
+        read_signature(&mut sig_file, input_size)?
     };
 
     let new_file = FileOrStdin::new(new_file)?;

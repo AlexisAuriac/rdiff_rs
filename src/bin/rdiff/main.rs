@@ -42,6 +42,9 @@ enum Command {
         #[arg(short, long, default_value_t = false)]
         /// overwrite existing files
         force: bool,
+        #[arg(short = 'I', long, default_value = None)]
+        /// signature size in bytes
+        input_size: Option<usize>,
     },
     /// uses the delta file and old file to produce the new file
     Patch {
@@ -104,7 +107,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             new_file,
             delta: delta_file,
             force,
-        } => delta(sig_file, new_file, delta_file, *force)?,
+            input_size,
+        } => delta(sig_file, new_file, delta_file, *force, *input_size)?,
         Command::Patch {
             basis,
             delta: delta_file,
