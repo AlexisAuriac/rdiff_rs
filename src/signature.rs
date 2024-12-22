@@ -8,7 +8,7 @@ use std::{
 use crate::{
     error::Error,
     signature_type::SignatureType,
-    strong_sum::{StrongSum, StrongType},
+    strong_sum::{StrongSum, StrongSumBlock, StrongType, MAX_STRONG_SUM_SIZE},
     weak_sum::{WeakSum, WeakSumType},
 };
 
@@ -111,7 +111,7 @@ pub struct Signature {
     pub sigtype: SignatureType,
     pub block_len: u32,
     pub strong_len: u32,
-    pub strong_sigs: Vec<Vec<u8>>,
+    pub strong_sigs: Vec<StrongSumBlock>,
     pub weak2block: HashMap<u32, i32>,
 }
 
@@ -138,8 +138,8 @@ where
         (input_size - 12) / (strong_len as usize + 4)
     };
 
-    let mut strong_sigs: Vec<Vec<u8>> = Vec::with_capacity(nb_blocks);
-    let mut weak2block: HashMap<u32, i32> = HashMap::with_capacity(nb_blocks);
+    let mut strong_sigs = Vec::with_capacity(nb_blocks);
+    let mut weak2block = HashMap::with_capacity(nb_blocks);
 
     loop {
         let n = input.read(&mut buf32)?;
@@ -150,8 +150,9 @@ where
         }
         let weak_sum = u32::from_be_bytes(buf32);
 
-        let mut strong_sum = vec![0u8; strong_len as usize];
-        input.read_exact(&mut strong_sum)?;
+        let mut strong_sum = [0u8; MAX_STRONG_SUM_SIZE];
+        let buf_strong_sum = &mut strong_sum[..strong_len as usize];
+        input.read_exact(buf_strong_sum)?;
 
         weak2block.insert(weak_sum, strong_sigs.len() as i32);
         strong_sigs.push(strong_sum);

@@ -1,8 +1,11 @@
-use std::io::{self, Read};
+use std::io::{self, Cursor, Read};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use rdiff::weak_sum::{rabin_karp::RabinKarp, rollsum::Rollsum};
+use rdiff::{
+    signature::{read_signature, signature},
+    weak_sum::{rabin_karp::RabinKarp, rollsum::Rollsum},
+};
 
 struct RandReader {
     rng: StdRng,
@@ -46,5 +49,22 @@ fn weak_sum(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, weak_sum);
+fn bench_read_signature(c: &mut Criterion) {
+    let rnd_reader = RandReader::seed_from_u64(0);
+
+    let mut output = vec![];
+    signature(
+        &mut rnd_reader.take(1_000_000),
+        &mut Cursor::new(&mut output),
+    )
+    .unwrap();
+
+    c.bench_function("read signature with input size", |b| {
+        b.iter(|| {
+            read_signature(&mut Cursor::new(&output), Some(output.len())).unwrap();
+        })
+    });
+}
+
+criterion_group!(benches, weak_sum, bench_read_signature);
 criterion_main!(benches);

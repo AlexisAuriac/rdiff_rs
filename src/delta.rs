@@ -57,7 +57,8 @@ where
         if let Some(block_idx) = sig.weak2block.get(&digest) {
             strong.update(ring_buf.as_bytes());
             let strong_sum = strong.finalize_reset(sig.strong_len);
-            if sig.strong_sigs[*block_idx as usize] == strong_sum {
+
+            if sig.strong_sigs[*block_idx as usize] == strong_sum[..] {
                 weak.reset();
                 ring_buf.reset();
 

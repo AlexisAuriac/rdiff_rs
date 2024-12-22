@@ -8,6 +8,10 @@ pub type Blake2b256 = Blake2b<U32>;
 pub const BLAKE2_SUM_LENGTH: u32 = 32;
 pub const MD4_SUM_LENGTH: u32 = 16;
 
+pub const MAX_STRONG_SUM_SIZE: usize = 32;
+
+pub type StrongSumBlock = [u8; MAX_STRONG_SUM_SIZE];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StrongType {
     Blake2B,
