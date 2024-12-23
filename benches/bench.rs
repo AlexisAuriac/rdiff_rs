@@ -1,6 +1,9 @@
 mod utils;
 
-use std::io::{Cursor, Read};
+use std::{
+    io::{Cursor, Read},
+    time::Duration,
+};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use rdiff::{
@@ -8,7 +11,7 @@ use rdiff::{
     weak_sum::{rabin_karp::RabinKarp, rollsum::Rollsum},
 };
 
-use utils::RandReader;
+use utils::{RandReader, SlowReader};
 
 fn weak_sum(c: &mut Criterion) {
     let mut rnd_reader = RandReader::seed_from_u64(0);
@@ -52,6 +55,14 @@ fn bench_read_signature(c: &mut Criterion) {
     c.bench_function("read signature without input size", |b| {
         b.iter(|| {
             read_signature(&mut Cursor::new(&output), None).unwrap();
+        })
+    });
+
+    c.bench_function("read signature with input size, slow reader", |b| {
+        b.iter(|| {
+            let mut input =
+                SlowReader::with_interval(Cursor::new(&output), Duration::from_nanos(100));
+            read_signature(&mut input, Some(output.len())).unwrap();
         })
     });
 }
