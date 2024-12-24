@@ -13,27 +13,40 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct SignatureOptions {
-    block_len: u32,
+    block_len: Option<u32>,
     strong_len: u32,
     strong_type: StrongType,
     weak_type: WeakSumType,
+    input_size: Option<usize>,
 }
 
 pub const DEFAULT_BLOCK_LEN: u32 = 2048;
 pub const DEFAULT_STRONG_LEN: u32 = 32;
 
+pub const MIN_BLOCK_LEN: u32 = 256;
+pub const INPUT_SIZE_FOR_MIN_BLOCK_LEN: usize = 65536;
+
+fn recommend_block_len(size: usize) -> u32 {
+    if size <= INPUT_SIZE_FOR_MIN_BLOCK_LEN {
+        MIN_BLOCK_LEN
+    } else {
+        (size as f64).sqrt().floor() as u32 & !127
+    }
+}
+
 impl SignatureOptions {
     pub fn new() -> Self {
         Self {
-            block_len: DEFAULT_BLOCK_LEN,
+            block_len: None,
             strong_len: DEFAULT_STRONG_LEN,
             strong_type: StrongType::Blake2B,
             weak_type: WeakSumType::RabinKarp,
+            input_size: None,
         }
     }
 
     pub fn block_len(&mut self, block_len: u32) -> &mut Self {
-        self.block_len = block_len;
+        self.block_len = Some(block_len);
         self
     }
 
@@ -52,11 +65,31 @@ impl SignatureOptions {
         self
     }
 
+    pub fn input_size(&mut self, size: usize) -> &mut Self {
+        self.input_size = Some(size);
+        self
+    }
+
+    fn recommended_block_len(&self) -> u32 {
+        if let Some(block_len) = self.block_len {
+            return block_len;
+        }
+
+        let size = match self.input_size {
+            None => return DEFAULT_BLOCK_LEN,
+            Some(size) => size,
+        };
+
+        recommend_block_len(size)
+    }
+
     pub fn signature<I, O>(&self, input: &mut I, output: &mut O) -> Result<(), Error>
     where
         I: Read,
         O: Write,
     {
+        let block_len = self.recommended_block_len();
+
         if self.strong_len > self.strong_type.sum_length() {
             return Err(Error::BadStrongLen(self.strong_len));
         }
@@ -67,10 +100,10 @@ impl SignatureOptions {
         let mut strong = StrongSum::from_type(sigtype.strong_type());
 
         output.write_all(&(sigtype as u32).to_be_bytes())?;
-        output.write_all(&self.block_len.to_be_bytes())?;
+        output.write_all(&block_len.to_be_bytes())?;
         output.write_all(&self.strong_len.to_be_bytes())?;
 
-        let mut block = vec![0u8; self.block_len as usize];
+        let mut block = vec![0u8; block_len as usize];
 
         loop {
             let n = input.read(&mut block[..])?;
@@ -116,6 +149,12 @@ mod tests {
     use crate::{signature::read_signature, strong_sum::StrongType, weak_sum::WeakSumType};
 
     use super::*;
+
+    #[test]
+    fn test_recommend_block_len() {
+        assert_eq!(recommend_block_len(0), MIN_BLOCK_LEN);
+        assert_eq!(recommend_block_len(1000000), 896);
+    }
 
     fn generic_test_signature(
         name: &str,

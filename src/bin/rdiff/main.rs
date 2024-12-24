@@ -15,9 +15,9 @@ enum Command {
         basis: String,
         /// output signature file
         signature: String,
-        #[arg(short, long, default_value_t = 2048)]
+        #[arg(short, long, default_value = None)]
         /// Signature block size
-        block_size: u32,
+        block_size: Option<u32>,
         #[arg(short = 'S', long, default_value_t = 32)]
         /// Set signature strength
         sum_size: u32,
@@ -30,6 +30,9 @@ enum Command {
         #[arg(short, long, default_value_t = false)]
         /// overwrite existing files
         force: bool,
+        #[arg(short = 'I', long, default_value = None)]
+        /// input size in bytes
+        input_size: Option<usize>,
     },
     /// calculates the binary diff between old and new files
     Delta {
@@ -74,17 +77,27 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Box<dy
             sum_size,
             hash,
             rollsum,
+            input_size,
             ..
         } => {
             let weak = WeakSumType::try_from_str(rollsum)?;
             let strong = StrongType::try_from_str(hash)?;
 
-            Ok(SignatureOptions::new()
-                .block_len(*block_size)
+            let mut opts = SignatureOptions::new()
                 .strong_len(*sum_size)
                 .weak_type(weak)
                 .strong_type(strong)
-                .to_owned())
+                .to_owned();
+
+            if let Some(block_size) = block_size {
+                opts.block_len(*block_size);
+            }
+
+            if let Some(input_size) = input_size {
+                opts.input_size(*input_size);
+            }
+
+            Ok(opts)
         }
         _ => Err("can't call this function for non-signature command".into()),
     }

@@ -40,7 +40,7 @@ fn signature_size(input_size: usize, opts: &SignatureOptions) -> Result<Signatur
 }
 
 pub fn measure_wire_usage() -> Result<(), Error> {
-    let sizes = [1_000, 1_000_000, 10_000_000];
+    let sizes = [1_000, 1_000_000, 10_000_000, 100_000_000];
 
     let opts = SignatureOptions::new();
     for size in sizes {
@@ -50,6 +50,18 @@ pub fn measure_wire_usage() -> Result<(), Error> {
             BytesFmt(size),
             report
         );
+    }
+
+    for size in sizes {
+        println!(
+            "--- signature size for input_size={} (with input size hint):",
+            BytesFmt(size),
+        );
+
+        let opts = SignatureOptions::new().input_size(size).to_owned();
+        let report = signature_size(size, &opts)?;
+
+        println!("{}", report);
     }
 
     Ok(())

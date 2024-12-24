@@ -23,7 +23,7 @@ where
 pub fn signature_opts<P1, P2>(
     basis: P1,
     sig_file: P2,
-    opts: SignatureOptions,
+    mut opts: SignatureOptions,
     force: bool,
 ) -> Result<(), Error>
 where
@@ -37,6 +37,9 @@ where
         .truncate(true)
         .write(true)
         .open(&sig_file)?;
+
+    let input_size = in_file.metadata()?.len();
+    opts.input_size(input_size as usize);
 
     let res = opts.signature(
         &mut BufReaderWithRetry::new(&in_file), // dramatically improves perf for small block len

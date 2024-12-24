@@ -93,11 +93,19 @@ impl Write for FileOrStdout {
 pub fn signature_opts(
     basis: &str,
     sig_file: &str,
-    opts: SignatureOptions,
+    mut opts: SignatureOptions,
     force: bool,
 ) -> Result<(), Error> {
     let in_file = FileOrStdin::new(basis)?;
     let mut out_file = FileOrStdout::new(sig_file, force)?;
+
+    match &in_file {
+        FileOrStdin::File(file) => {
+            let input_size = file.metadata()?.len();
+            opts.input_size(input_size as usize);
+        }
+        FileOrStdin::Stdin(_) => (),
+    }
 
     let res = opts.signature(
         &mut BufReaderWithRetry::new(in_file),
