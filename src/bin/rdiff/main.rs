@@ -83,7 +83,8 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Box<dy
                 .block_len(*block_size)
                 .strong_len(*sum_size)
                 .weak_type(weak)
-                .strong_type(strong))
+                .strong_type(strong)
+                .to_owned())
         }
         _ => Err("can't call this function for non-signature command".into()),
     }

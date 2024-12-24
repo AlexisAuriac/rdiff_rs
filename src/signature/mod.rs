@@ -19,37 +19,40 @@ pub struct SignatureOptions {
     weak_type: WeakSumType,
 }
 
+pub const DEFAULT_BLOCK_LEN: u32 = 2048;
+pub const DEFAULT_STRONG_LEN: u32 = 32;
+
 impl SignatureOptions {
     pub fn new() -> Self {
         Self {
-            block_len: 2048,
-            strong_len: 32,
+            block_len: DEFAULT_BLOCK_LEN,
+            strong_len: DEFAULT_STRONG_LEN,
             strong_type: StrongType::Blake2B,
             weak_type: WeakSumType::RabinKarp,
         }
     }
 
-    pub fn block_len(mut self, block_len: u32) -> Self {
+    pub fn block_len(&mut self, block_len: u32) -> &mut Self {
         self.block_len = block_len;
         self
     }
 
-    pub fn strong_len(mut self, strong_len: u32) -> Self {
+    pub fn strong_len(&mut self, strong_len: u32) -> &mut Self {
         self.strong_len = strong_len;
         self
     }
 
-    pub fn strong_type(mut self, strong_type: StrongType) -> Self {
+    pub fn strong_type(&mut self, strong_type: StrongType) -> &mut Self {
         self.strong_type = strong_type;
         self
     }
 
-    pub fn weak_type(mut self, weak_type: WeakSumType) -> Self {
+    pub fn weak_type(&mut self, weak_type: WeakSumType) -> &mut Self {
         self.weak_type = weak_type;
         self
     }
 
-    pub fn signature<I, O>(self, input: &mut I, output: &mut O) -> Result<(), Error>
+    pub fn signature<I, O>(&self, input: &mut I, output: &mut O) -> Result<(), Error>
     where
         I: Read,
         O: Write,
