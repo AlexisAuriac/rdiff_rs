@@ -1,6 +1,6 @@
 mod utils;
 
-use std::io::{Cursor, Read};
+use std::io::{sink, Cursor, Read};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use rdiff::{
@@ -33,6 +33,31 @@ fn weak_sum(c: &mut Criterion) {
     });
 }
 
+fn bench_signature(c: &mut Criterion) {
+    let mut rnd_reader = RandReader::seed_from_u64(0);
+
+    c.bench_function("signature 1kb", |b| {
+        b.iter(|| {
+            let rnd_reader = &mut rnd_reader;
+            signature(&mut rnd_reader.take(1_000), &mut sink()).unwrap();
+        })
+    });
+
+    c.bench_function("signature 1Mb", |b| {
+        b.iter(|| {
+            let rnd_reader = &mut rnd_reader;
+            signature(&mut rnd_reader.take(1_000_000), &mut sink()).unwrap();
+        })
+    });
+
+    c.bench_function("signature 100Mb", |b| {
+        b.iter(|| {
+            let rnd_reader = &mut rnd_reader;
+            signature(&mut rnd_reader.take(100_000_000), &mut sink()).unwrap();
+        })
+    });
+}
+
 fn bench_read_signature(c: &mut Criterion) {
     let rnd_reader = RandReader::seed_from_u64(0);
 
@@ -56,5 +81,5 @@ fn bench_read_signature(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, weak_sum, bench_read_signature);
+criterion_group!(benches, weak_sum, bench_signature, bench_read_signature);
 criterion_main!(benches);
