@@ -1,8 +1,12 @@
+pub mod builder;
+
 use std::io::{Read, Write};
 
+use builder::DeltaBuilder;
+
 use crate::{
-    delta_builder::DeltaBuilder, error::Error, ring_buffer::RingBuffer, signature::Signature,
-    strong_sum::StrongSum, weak_sum::WeakSum,
+    error::Error, ring_buffer::RingBuffer, signature::Signature, strong_sum::StrongSum,
+    weak_sum::WeakSum,
 };
 
 pub fn delta<I, O>(sig: &Signature, input: &mut I, output: &mut O) -> Result<(), Error>

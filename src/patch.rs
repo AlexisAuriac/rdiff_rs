@@ -1,7 +1,7 @@
 use std::io::{copy, Read, Seek, SeekFrom, Write};
 
 use crate::{
-    delta_builder::DELTA_MAGIC,
+    delta::builder::DELTA_MAGIC,
     error::Error,
     op::{OpArgLen, OpKind, OP2CMD},
 };
