@@ -1,5 +1,5 @@
 pub mod rabin_karp;
-mod rabin_karp_consts;
+pub mod rabin_karp_consts;
 pub mod rollsum;
 
 use crate::error::Error;
