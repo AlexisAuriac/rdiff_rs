@@ -11,17 +11,24 @@ use crate::{
     weak_sum::{WeakSum, WeakSumType},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StrongLenOption {
+    Min,
+    Max,
+    N(u32),
+}
+
 #[derive(Debug, Clone)]
 pub struct SignatureOptions {
     block_len: Option<u32>,
-    strong_len: u32,
+    strong_len: StrongLenOption,
     strong_type: StrongType,
     weak_type: WeakSumType,
     input_size: Option<usize>,
 }
 
 pub const DEFAULT_BLOCK_LEN: u32 = 2048;
-pub const DEFAULT_STRONG_LEN: u32 = 32;
+pub const DEFAULT_MIN_STRONG_LEN: u32 = 12;
 
 pub const MIN_BLOCK_LEN: u32 = 256;
 pub const INPUT_SIZE_FOR_MIN_BLOCK_LEN: usize = 65536;
@@ -34,11 +41,15 @@ fn recommend_block_len(size: usize) -> u32 {
     }
 }
 
+fn recommend_min_strong_len(size: usize, block_len: u32) -> u32 {
+    2 + ((size + (1 << 24)).ilog2() + ((size as u32 / block_len + 1).ilog2() + 7)) / 8
+}
+
 impl SignatureOptions {
     pub fn new() -> Self {
         Self {
             block_len: None,
-            strong_len: DEFAULT_STRONG_LEN,
+            strong_len: StrongLenOption::Max,
             strong_type: StrongType::Blake2B,
             weak_type: WeakSumType::RabinKarp,
             input_size: None,
@@ -46,12 +57,34 @@ impl SignatureOptions {
     }
 
     pub fn block_len(&mut self, block_len: u32) -> &mut Self {
-        self.block_len = Some(block_len);
+        // the original librsync uses 0 to mean use recommended value
+        // also, we just don't want block_len to be 0
+        if block_len > 0 {
+            self.block_len = Some(block_len);
+        }
+
+        self
+    }
+
+    pub fn min_strong_len(&mut self) -> &mut Self {
+        self.strong_len = StrongLenOption::Min;
+        self
+    }
+
+    pub fn max_strong_len(&mut self) -> &mut Self {
+        self.strong_len = StrongLenOption::Max;
         self
     }
 
     pub fn strong_len(&mut self, strong_len: u32) -> &mut Self {
-        self.strong_len = strong_len;
+        // the original librsync uses 0 to mean max and -1 to mean min
+        // also, we just don't want strong_len to be 0
+        if strong_len == 0 {
+            self.strong_len = StrongLenOption::Max;
+        } else {
+            self.strong_len = StrongLenOption::N(strong_len);
+        }
+
         self
     }
 
@@ -76,11 +109,30 @@ impl SignatureOptions {
         }
 
         let size = match self.input_size {
-            None => return DEFAULT_BLOCK_LEN,
+            None | Some(0) => return DEFAULT_BLOCK_LEN,
             Some(size) => size,
         };
 
         recommend_block_len(size)
+    }
+
+    fn recommended_strong_len(&self, block_len: u32) -> Result<u32, Error> {
+        if let StrongLenOption::N(strong_len) = self.strong_len {
+            debug_assert!(strong_len > 0, "strong len must be more than 0");
+
+            return if strong_len > self.strong_type.sum_length() {
+                Err(Error::BadStrongLen(strong_len))
+            } else {
+                Ok(strong_len)
+            };
+        }
+
+        match (self.strong_len, self.input_size) {
+            (StrongLenOption::Min, Some(size)) => Ok(recommend_min_strong_len(size, block_len)),
+            (StrongLenOption::Min, None) => Ok(DEFAULT_MIN_STRONG_LEN),
+            (StrongLenOption::Max, _) => Ok(self.strong_type.sum_length()),
+            (StrongLenOption::N(_), _) => unreachable!(),
+        }
     }
 
     pub fn signature<I, O>(&self, input: &mut I, output: &mut O) -> Result<(), Error>
@@ -89,10 +141,10 @@ impl SignatureOptions {
         O: Write,
     {
         let block_len = self.recommended_block_len();
+        debug_assert!(block_len > 0, "block len must be more than 0");
 
-        if self.strong_len > self.strong_type.sum_length() {
-            return Err(Error::BadStrongLen(self.strong_len));
-        }
+        let strong_len = self.recommended_strong_len(block_len)?;
+        debug_assert!(strong_len > 0, "strong len must be more than 0");
 
         let sigtype = SignatureType::new(self.weak_type, self.strong_type);
 
@@ -101,7 +153,7 @@ impl SignatureOptions {
 
         output.write_all(&(sigtype as u32).to_be_bytes())?;
         output.write_all(&block_len.to_be_bytes())?;
-        output.write_all(&self.strong_len.to_be_bytes())?;
+        output.write_all(&strong_len.to_be_bytes())?;
 
         let mut block = vec![0u8; block_len as usize];
 
@@ -118,7 +170,7 @@ impl SignatureOptions {
             weak.reset();
 
             strong.update(data);
-            let strong_sum = strong.finalize_reset(self.strong_len);
+            let strong_sum = strong.finalize_reset(strong_len);
             output.write_all(&strong_sum)?;
         }
 
@@ -154,6 +206,12 @@ mod tests {
     fn test_recommend_block_len() {
         assert_eq!(recommend_block_len(0), MIN_BLOCK_LEN);
         assert_eq!(recommend_block_len(1000000), 896);
+    }
+
+    #[test]
+    fn test_recommend_min_strong_len() {
+        assert_eq!(recommend_min_strong_len(0, 256), 5);
+        assert_eq!(recommend_min_strong_len(1000000, 896), 7);
     }
 
     fn generic_test_signature(

@@ -64,5 +64,20 @@ pub fn measure_wire_usage() -> Result<(), Error> {
         println!("{}", report);
     }
 
+    for size in sizes {
+        println!(
+            "--- signature size for input_size={} (with input size hint) and min strong_len:",
+            BytesFmt(size),
+        );
+
+        let opts = SignatureOptions::new()
+            .input_size(size)
+            .min_strong_len()
+            .to_owned();
+        let report = signature_size(size, &opts)?;
+
+        println!("{}", report);
+    }
+
     Ok(())
 }
