@@ -42,32 +42,27 @@ fn signature_size(input_size: usize, opts: &SignatureOptions) -> Result<Signatur
 pub fn measure_wire_usage() -> Result<(), Error> {
     let sizes = [1_000, 1_000_000, 10_000_000, 100_000_000];
 
-    let opts = SignatureOptions::new();
-    for size in sizes {
-        let report = signature_size(size, &opts)?;
-        println!(
-            "--- signature size for input_size={}:\n{}",
-            BytesFmt(size),
-            report
-        );
-    }
-
     for size in sizes {
         println!(
             "--- signature size for input_size={} (with input size hint):",
             BytesFmt(size),
         );
+        println!("input size:  {}", BytesFmt(size));
+        println!("output size:");
+
+        let report = signature_size(size, &SignatureOptions::new())?;
+        println!(
+            "\tbase: {} ({:.2}%)",
+            BytesFmt(report.output_size),
+            report.cmp * 100.0,
+        );
 
         let opts = SignatureOptions::new().input_size(size).to_owned();
         let report = signature_size(size, &opts)?;
-
-        println!("{}", report);
-    }
-
-    for size in sizes {
         println!(
-            "--- signature size for input_size={} (with input size hint) and min strong_len:",
-            BytesFmt(size),
+            "\tsize hint: {} ({:.2}%)",
+            BytesFmt(report.output_size),
+            report.cmp * 100.0,
         );
 
         let opts = SignatureOptions::new()
@@ -75,8 +70,11 @@ pub fn measure_wire_usage() -> Result<(), Error> {
             .min_strong_len()
             .to_owned();
         let report = signature_size(size, &opts)?;
-
-        println!("{}", report);
+        println!(
+            "\tsize hint+min strong len: {} ({:.2}%)",
+            BytesFmt(report.output_size),
+            report.cmp * 100.0,
+        );
     }
 
     Ok(())
