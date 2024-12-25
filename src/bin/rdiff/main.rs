@@ -1,7 +1,6 @@
 mod whole;
 
-use std::error::Error;
-
+use anyhow::{anyhow, Error};
 use clap::{Parser, Subcommand};
 use rdiff::{signature::SignatureOptions, strong_sum::StrongType, weak_sum::WeakSumType};
 use whole::{delta, patch, signature_opts};
@@ -18,9 +17,9 @@ enum Command {
         #[arg(short, long, default_value = None)]
         /// Signature block size
         block_size: Option<u32>,
-        #[arg(short = 'S', long, default_value_t = 32)]
-        /// Set signature strength
-        sum_size: u32,
+        #[arg(short = 'S', long, default_value = None)]
+        /// Set signature strength (-1 for minimum, max by default)
+        sum_size: Option<i64>,
         #[arg(short = 'H', long, default_value = "blake2")]
         /// Hash algorithm: blake2, md4
         hash: String,
@@ -70,7 +69,7 @@ struct Cli {
     command: Command,
 }
 
-fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Box<dyn Error>> {
+fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Error> {
     match cmd {
         Command::Signature {
             block_size,
@@ -84,7 +83,6 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Box<dy
             let strong = StrongType::try_from_str(hash)?;
 
             let mut opts = SignatureOptions::new()
-                .strong_len(*sum_size)
                 .weak_type(weak)
                 .strong_type(strong)
                 .to_owned();
@@ -97,13 +95,36 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Box<dy
                 opts.input_size(*input_size);
             }
 
+            // clumsy attempt to be compatible with the original rdiff
+            // -1 => min, 0 => max, n => n
+            match sum_size {
+                Some(-1) => {
+                    opts.min_strong_len();
+                }
+                Some(0) => {
+                    opts.max_strong_len();
+                }
+                Some(sum_size) if *sum_size > u32::MAX as i64 => {
+                    return Err(anyhow!("sum size is too big"));
+                }
+                Some(sum_size) if *sum_size < -1 => {
+                    return Err(anyhow!("sum size is too small"));
+                }
+                Some(n) => {
+                    opts.strong_len(*n as u32);
+                }
+                None => (),
+            }
+
             Ok(opts)
         }
-        _ => Err("can't call this function for non-signature command".into()),
+        _ => Err(anyhow!(
+            "can't call this function for non-signature command"
+        )),
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
     match &cli.command {
