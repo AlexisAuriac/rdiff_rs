@@ -17,7 +17,7 @@ enum Command {
         /// number of powers to precompute
         n: u32,
         #[arg(short, long, default_value = None)]
-        /// Signature block size
+        /// write output to path
         output: Option<String>,
     },
 }
