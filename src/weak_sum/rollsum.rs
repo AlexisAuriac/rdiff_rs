@@ -42,6 +42,8 @@ impl Rollsum {
 
     #[inline]
     pub fn rotate(&mut self, outb: u8, inb: u8) {
+        debug_assert!(self.count > 0, "rotate on an empty rollsum");
+
         self.s1 += Wrapping(inb as u16) - Wrapping(outb as u16);
         self.s2 +=
             self.s1 - (Wrapping(self.count as u16) * Wrapping(outb as u16 + ROLLSUM_CHAR_OFFSET));
@@ -56,6 +58,8 @@ impl Rollsum {
 
     #[inline]
     pub fn rollout(&mut self, outb: u8) {
+        debug_assert!(self.count > 0, "rollout on an empty rollsum");
+
         self.s1 -= outb as u16 + ROLLSUM_CHAR_OFFSET;
         self.s2 -= Wrapping(self.count as u16) * Wrapping(outb as u16 + ROLLSUM_CHAR_OFFSET);
         self.count -= 1;

@@ -88,6 +88,8 @@ impl RabinKarp {
 
     #[inline]
     pub fn rotate(&mut self, outb: u8, inb: u8) {
+        debug_assert!(self.count > 0, "rotate on an empty rollsum");
+
         self.hash = self.hash * Wrapping(RABINKARP_MULT) + Wrapping(inb as u32)
             - self.mult * Wrapping(outb as u32 + RABINKARP_ADJ);
     }
@@ -101,6 +103,8 @@ impl RabinKarp {
 
     #[inline]
     pub fn rollout(&mut self, outb: u8) {
+        debug_assert!(self.count > 0, "rollout on an empty rollsum");
+
         self.count -= 1;
         self.mult *= RABINKARP_INVM;
         self.hash -= self.mult * (Wrapping(outb as u32) + Wrapping(RABINKARP_ADJ));
