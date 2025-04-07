@@ -15,12 +15,12 @@ use crate::{
 enum StrongLenOption {
     Min,
     Max,
-    N(u32),
+    N(u32), // more than zero
 }
 
 #[derive(Debug, Clone)]
 pub struct SignatureOptions {
-    block_len: Option<u32>,
+    block_len: Option<u32>, // more than zero
     strong_len: StrongLenOption,
     strong_type: StrongType,
     weak_type: WeakSumType,
