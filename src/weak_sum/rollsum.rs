@@ -128,8 +128,11 @@ mod tests {
 
         r.update(&data);
         assert_eq!(0x06740198, r.digest());
+        assert_eq!(r.count(), data.len());
+
         r.update(&more_data);
-        assert_eq!(0x0E1A02EA, r.digest())
+        assert_eq!(0x0E1A02EA, r.digest());
+        assert_eq!(r.count(), data.len() + more_data.len());
     }
 
     #[test]
@@ -138,13 +141,19 @@ mod tests {
         let data = [222, 11, 0, 13, 7];
 
         r.update(&data);
+        let init_count = r.count();
 
         r.rotate(222, 39);
         assert_eq!(0x026400E1, r.digest());
+        assert_eq!(r.count(), init_count);
+
         r.rotate(11, 177);
         assert_eq!(0x03190187, r.digest());
+        assert_eq!(r.count(), init_count);
+
         r.rotate(0, 0);
         assert_eq!(0x04050187, r.digest());
+        assert_eq!(r.count(), init_count);
     }
 
     #[test]
