@@ -30,9 +30,11 @@ where
 
     input.read_exact(&mut buf32)?;
     let block_len = u32::from_be_bytes(buf32);
+    // todo: check block_len > 0
 
     input.read_exact(&mut buf32)?;
     let strong_len = u32::from_be_bytes(buf32);
+    // todo: check strong_len makes sense
 
     let input_size = size.unwrap_or(0);
     let nb_blocks = if input_size < 12 {

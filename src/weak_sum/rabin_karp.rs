@@ -3,10 +3,9 @@
 
 use std::num::Wrapping;
 
-use crate::weak_sum::rabin_karp_consts::RABINKARP_MULT_POW2;
-
-use super::rabin_karp_consts::{
-    RABINKARP_ADJ, RABINKARP_INVM, RABINKARP_MULT, RABINKARP_MULT_POW, RABINKARP_SEED,
+use crate::weak_sum::rabin_karp_consts::{
+    RABINKARP_ADJ, RABINKARP_INVM, RABINKARP_MULT, RABINKARP_MULT_POW, RABINKARP_MULT_POW2,
+    RABINKARP_SEED,
 };
 
 #[derive(Debug)]
