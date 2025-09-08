@@ -10,6 +10,20 @@ pub static RABINKARP_MULT_POW2: [u32; 32] = [
     0x1c000001, 0x38000001, 0x70000001, 0xe0000001, 0xc0000001, 0x80000001, 0x00000001, 0x00000001,
 ];
 
+const fn compute_mult_pow<const N: usize>() -> [u32; N] {
+    let mut data = [0; N];
+    let mut m: u32 = 1;
+
+    let mut i = 0;
+    while i < N {
+        m = m.wrapping_mul(RABINKARP_MULT);
+        data[i] = m;
+        i += 1;
+    }
+
+    data
+}
+
 // we could go over 2048, but that feels overkill
 // goes from RABINKARP_MULT^1 to RABINKARP_MULT^2048 (included)
-pub static RABINKARP_MULT_POW: [u32; 2048] = include!("rabinkarp_mult_pow.data");
+pub static RABINKARP_MULT_POW: [u32; 2048] = compute_mult_pow();
