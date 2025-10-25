@@ -1,9 +1,9 @@
-use std::io::{copy, Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write, copy};
 
 use crate::{
     delta::builder::DELTA_MAGIC,
     error::Error,
-    op::{OpArgLen, OpKind, OP2CMD},
+    op::{OP2CMD, OpArgLen, OpKind},
 };
 
 fn read_param<I>(i: &mut I, size: OpArgLen) -> Result<i64, Error>

@@ -1,6 +1,6 @@
 use std::{
-    fs::{remove_file, File, OpenOptions},
-    io::{self, stdin, stdout, BufReader, BufWriter, Read, Stdin, Stdout, Write},
+    fs::{File, OpenOptions, remove_file},
+    io::{self, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout},
     path::PathBuf,
 };
 
@@ -9,7 +9,7 @@ use rdiff::{
     delta::delta as io_delta,
     error::Error,
     patch::patch as io_patch,
-    signature::{read_signature, SignatureOptions},
+    signature::{SignatureOptions, read_signature},
 };
 
 // largely copied from the library whole.rs

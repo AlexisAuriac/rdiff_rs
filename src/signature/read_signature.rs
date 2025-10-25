@@ -8,7 +8,7 @@ use std::{
 use crate::{
     error::Error,
     signature_type::SignatureType,
-    strong_sum::{StrongSumBlock, MAX_STRONG_SUM_SIZE},
+    strong_sum::{MAX_STRONG_SUM_SIZE, StrongSumBlock},
 };
 
 pub struct Signature {

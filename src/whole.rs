@@ -1,5 +1,5 @@
 use std::{
-    fs::{remove_file, OpenOptions},
+    fs::{OpenOptions, remove_file},
     io::{BufReader, BufWriter},
     path::Path,
 };
@@ -9,7 +9,7 @@ use crate::{
     delta::delta as io_delta,
     error::Error,
     patch::patch as io_patch,
-    signature::{read_signature, SignatureOptions},
+    signature::{SignatureOptions, read_signature},
 };
 
 pub fn signature<P1, P2>(basis: P1, sig_file: P2, force: bool) -> Result<(), Error>

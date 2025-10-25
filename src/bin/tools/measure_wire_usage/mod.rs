@@ -2,7 +2,7 @@ mod utils;
 
 use std::{
     fmt::{self, Display, Formatter},
-    io::{sink, Read},
+    io::{Read, sink},
 };
 
 use rdiff::{error::Error, signature::SignatureOptions};

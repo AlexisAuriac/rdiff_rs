@@ -1,6 +1,6 @@
 use std::io::{self, Read};
 
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng, rngs::StdRng};
 
 pub struct RandReader {
     rng: StdRng,

@@ -1,6 +1,6 @@
 mod whole;
 
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use clap::{Parser, Subcommand};
 use rdiff::{signature::SignatureOptions, strong_sum::StrongType, weak_sum::WeakSumType};
 use whole::{delta, patch, signature_opts};

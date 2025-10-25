@@ -1,10 +1,10 @@
 mod utils;
 
-use std::io::{sink, Cursor, Read};
+use std::io::{Cursor, Read, sink};
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use rdiff::{
-    signature::{read_signature, signature, SignatureOptions},
+    signature::{SignatureOptions, read_signature, signature},
     weak_sum::{rabin_karp::RabinKarp, rollsum::Rollsum},
 };
 
