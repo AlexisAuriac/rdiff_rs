@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.95"
+anyhow = "1.0.100"
 blake2 = "0.10.6"
-clap = { version = "4.5.23", features = ["derive"] }
+clap = { version = "4.5.50", features = ["derive"] }
 md4 = "0.10.2"
-rand = "0.8.5"
+rand = "0.9.2"
 
 [dev-dependencies]
 criterion = "0.5.1"
