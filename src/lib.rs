@@ -1,3 +1,5 @@
+#![feature(portable_simd)]
+
 pub mod buf_reader_with_retry;
 pub mod delta;
 pub mod error;

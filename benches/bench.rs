@@ -27,6 +27,14 @@ fn weak_sum(c: &mut Criterion) {
     c.bench_function("rabinkarp 2048 update+digest", |b| {
         b.iter(|| {
             let mut r = RabinKarp::new();
+            r.update2(&buf);
+            let _ = r.digest();
+        })
+    });
+
+    c.bench_function("rabinkarp 2048 update+digest (simd)", |b| {
+        b.iter(|| {
+            let mut r = RabinKarp::new();
             r.update(&buf);
             let _ = r.digest();
         })

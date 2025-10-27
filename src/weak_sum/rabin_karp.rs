@@ -36,6 +36,33 @@ fn rabinkarp_pow(mut n: u32) -> u32 {
     ans.0
 }
 
+use std::simd::num::SimdUint;
+use std::simd::*;
+
+use super::rabin_karp_consts::RABINKARP_MULT_POW_N;
+
+static RABINKARP_MULT_POW_X4: [u32x4; RABINKARP_MULT_POW.len() / 4] = {
+    assert!(RABINKARP_MULT_POW.len() >= 4);
+    assert!(RABINKARP_MULT_POW.len().is_multiple_of(4));
+
+    let mut mults = [u32x4::splat(0); RABINKARP_MULT_POW.len() / 4];
+
+    let mut i = 0;
+    while i < RABINKARP_MULT_POW.len() / 4 {
+        let j = i * 4;
+
+        mults[i] = u32x4::from_array([
+            RABINKARP_MULT_POW[j],
+            RABINKARP_MULT_POW[j + 1],
+            RABINKARP_MULT_POW[j + 2],
+            RABINKARP_MULT_POW[j + 3],
+        ]);
+        i += 1;
+    }
+
+    mults
+};
+
 impl RabinKarp {
     #[inline]
     pub fn new() -> Self {
@@ -70,13 +97,45 @@ impl RabinKarp {
         // even if p.len() is very large
         // rchunks is a lot faster than chunks here, and we don't care about order
         for chunk in p.rchunks(RABINKARP_MULT_POW.len()) {
-            let mut m = 1;
+            let mut tmp_hash = u32x4::splat(0);
+
+            assert!(chunk.len().is_multiple_of(4));
+
+            for (i, bs) in chunk.chunks(4).rev().enumerate() {
+                let b_x4 =
+                    u32x4::from_array([bs[3] as u32, bs[2] as u32, bs[1] as u32, bs[0] as u32]);
+
+                tmp_hash += b_x4 * RABINKARP_MULT_POW_X4[i];
+            }
+
+            let m = if chunk.len() < RABINKARP_MULT_POW.len() {
+                RABINKARP_MULT_POW_X4[chunk.len() / 4].as_array()[chunk.len() % 4]
+            } else {
+                RABINKARP_MULT_POW_N
+            };
+
+            self.hash = self.hash * Wrapping(m) + Wrapping(tmp_hash.reduce_sum());
+        }
+
+        self.count += p.len();
+        self.mult *= rabinkarp_pow(p.len() as u32);
+    }
+
+    pub fn update2(&mut self, p: &[u8]) {
+        // divide the buffer into chunks so we can keep using precomputed value
+        // even if p.len() is very large
+        // rchunks is a lot faster than chunks here, and we don't care about order
+        for chunk in p.rchunks(RABINKARP_MULT_POW.len()) {
             let mut tmp_hash = Wrapping(0);
 
             for (i, b) in chunk.iter().rev().enumerate() {
+                let m = RABINKARP_MULT_POW[i];
                 tmp_hash += Wrapping(*b as u32) * Wrapping(m);
-                m = RABINKARP_MULT_POW[i];
             }
+
+            let m = *RABINKARP_MULT_POW
+                .get(chunk.len())
+                .unwrap_or(&RABINKARP_MULT_POW_N);
 
             self.hash = self.hash * Wrapping(m) + tmp_hash;
         }
@@ -203,5 +262,11 @@ mod tests {
 
         r.update(&buf);
         assert_eq!(r.digest(), 0xc1972381);
+
+        r.reset();
+        let buf = (0..=255).cycle().take(10_000).collect::<Vec<u8>>();
+
+        r.update(&buf);
+        assert_eq!(r.digest(), 0x809ecb39);
     }
 }
