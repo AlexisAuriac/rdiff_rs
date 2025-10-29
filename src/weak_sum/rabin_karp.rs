@@ -99,17 +99,26 @@ impl RabinKarp {
         for chunk in p.rchunks(RABINKARP_MULT_POW.len()) {
             let mut tmp_hash = u32x4::splat(0);
 
-            assert!(chunk.len().is_multiple_of(4));
-
-            for (i, bs) in chunk.chunks(4).rev().enumerate() {
+            for (i, bs) in chunk.rchunks_exact(4).enumerate() {
                 let b_x4 =
                     u32x4::from_array([bs[3] as u32, bs[2] as u32, bs[1] as u32, bs[0] as u32]);
 
                 tmp_hash += b_x4 * RABINKARP_MULT_POW_X4[i];
             }
 
+            if !chunk.len().is_multiple_of(4) {
+                let b_x4 = match *chunk.rchunks_exact(4).remainder() {
+                    [a] => u32x4::from_array([a as u32, 0, 0, 0]),
+                    [a, b] => u32x4::from_array([b as u32, a as u32, 0, 0]),
+                    [a, b, c] => u32x4::from_array([c as u32, b as u32, a as u32, 0]),
+                    _ => unreachable!(),
+                };
+                let m = RABINKARP_MULT_POW_X4[chunk.len() / 4];
+                tmp_hash += b_x4 * m;
+            }
+
             let m = if chunk.len() < RABINKARP_MULT_POW.len() {
-                RABINKARP_MULT_POW_X4[chunk.len() / 4].as_array()[chunk.len() % 4]
+                RABINKARP_MULT_POW[chunk.len()]
             } else {
                 RABINKARP_MULT_POW_N
             };
@@ -263,10 +272,25 @@ mod tests {
         r.update(&buf);
         assert_eq!(r.digest(), 0xc1972381);
 
+        debug_assert!(
+            10_000 > RABINKARP_MULT_POW.len(),
+            "should have input_size > RABINKARP_MULT_POW.len()",
+        );
+        debug_assert!(
+            10_000 % RABINKARP_MULT_POW.len() != 0,
+            "should have irregular chunk size",
+        );
         r.reset();
         let buf = (0..=255).cycle().take(10_000).collect::<Vec<u8>>();
 
         r.update(&buf);
         assert_eq!(r.digest(), 0x809ecb39);
+
+        debug_assert!(9_999 > RABINKARP_MULT_POW.len());
+        r.reset();
+        let buf = (0..=255).cycle().take(9_999).collect::<Vec<u8>>();
+
+        r.update(&buf);
+        assert_eq!(r.digest(), 0x39d48562);
     }
 }
