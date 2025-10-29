@@ -78,6 +78,38 @@ impl RabinKarp {
         self.count
     }
 
+    #[inline(always)]
+    fn compress_chunk(&self, hash: Wrapping<u32>, chunk: &[u8]) -> Wrapping<u32> {
+        debug_assert!(chunk.len() <= RABINKARP_MULT_POW.len());
+
+        let mut tmp_hash = u32x4::splat(0);
+
+        for (i, bs) in chunk.rchunks_exact(4).enumerate() {
+            let b_x4 = u32x4::from_array([bs[3] as u32, bs[2] as u32, bs[1] as u32, bs[0] as u32]);
+
+            tmp_hash += b_x4 * RABINKARP_MULT_POW_X4[i];
+        }
+
+        if !chunk.len().is_multiple_of(4) {
+            let b_x4 = match *chunk.rchunks_exact(4).remainder() {
+                [a] => u32x4::from_array([a as u32, 0, 0, 0]),
+                [a, b] => u32x4::from_array([b as u32, a as u32, 0, 0]),
+                [a, b, c] => u32x4::from_array([c as u32, b as u32, a as u32, 0]),
+                _ => unreachable!(),
+            };
+            let m = RABINKARP_MULT_POW_X4[chunk.len() / 4];
+            tmp_hash += b_x4 * m;
+        }
+
+        let m = if chunk.len() < RABINKARP_MULT_POW.len() {
+            RABINKARP_MULT_POW[chunk.len()]
+        } else {
+            RABINKARP_MULT_POW_N
+        };
+
+        hash * Wrapping(m) + Wrapping(tmp_hash.reduce_sum())
+    }
+
     // hash_n = hash_n-1 * m + x_n-1 <--- simple but inefficient
     // ---
     // hash_1 = hash_0 * m + x0
@@ -97,33 +129,7 @@ impl RabinKarp {
         // even if p.len() is very large
         // rchunks is a lot faster than chunks here, and we don't care about order
         for chunk in p.rchunks(RABINKARP_MULT_POW.len()) {
-            let mut tmp_hash = u32x4::splat(0);
-
-            for (i, bs) in chunk.rchunks_exact(4).enumerate() {
-                let b_x4 =
-                    u32x4::from_array([bs[3] as u32, bs[2] as u32, bs[1] as u32, bs[0] as u32]);
-
-                tmp_hash += b_x4 * RABINKARP_MULT_POW_X4[i];
-            }
-
-            if !chunk.len().is_multiple_of(4) {
-                let b_x4 = match *chunk.rchunks_exact(4).remainder() {
-                    [a] => u32x4::from_array([a as u32, 0, 0, 0]),
-                    [a, b] => u32x4::from_array([b as u32, a as u32, 0, 0]),
-                    [a, b, c] => u32x4::from_array([c as u32, b as u32, a as u32, 0]),
-                    _ => unreachable!(),
-                };
-                let m = RABINKARP_MULT_POW_X4[chunk.len() / 4];
-                tmp_hash += b_x4 * m;
-            }
-
-            let m = if chunk.len() < RABINKARP_MULT_POW.len() {
-                RABINKARP_MULT_POW[chunk.len()]
-            } else {
-                RABINKARP_MULT_POW_N
-            };
-
-            self.hash = self.hash * Wrapping(m) + Wrapping(tmp_hash.reduce_sum());
+            self.hash = self.compress_chunk(self.hash, chunk);
         }
 
         self.count += p.len();
