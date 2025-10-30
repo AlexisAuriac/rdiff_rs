@@ -92,12 +92,15 @@ impl RabinKarp {
         }
 
         if !chunk.len().is_multiple_of(4) {
-            let b_x4 = match *chunk.rchunks_exact(4).remainder() {
-                [a] => u32x4::from_array([a as u32, 0, 0, 0]),
-                [a, b] => u32x4::from_array([b as u32, a as u32, 0, 0]),
-                [a, b, c] => u32x4::from_array([c as u32, b as u32, a as u32, 0]),
-                _ => unreachable!(),
-            };
+            let remainder = chunk.rchunks_exact(4).remainder();
+            let mut padded_rem = [0u32; 4];
+
+            for (i, b) in remainder.iter().rev().enumerate() {
+                padded_rem[i] = *b as u32;
+            }
+
+            let b_x4 = u32x4::from_array(padded_rem);
+
             let m = RABINKARP_MULT_POW_X4[chunk.len() / 4];
             tmp_hash += b_x4 * m;
         }
