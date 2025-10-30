@@ -1,6 +1,4 @@
 use std::num::Wrapping;
-use std::simd::num::SimdUint;
-use std::simd::*;
 
 #[derive(Debug)]
 pub struct Rollsum {
@@ -29,77 +27,10 @@ impl Rollsum {
     pub fn update(&mut self, p: &[u8]) {
         let l = p.len();
 
-        // for b in p {
-        //     self.s1 += *b as u16;
-        //     self.s2 += self.s1;
-        // }
-
-        // self.s2 += self.s1 * Wrapping(p.len() as u16);
-        // for (i, b) in p.iter().enumerate() {
-        //     self.s2 += Wrapping(*b as u16) * Wrapping((p.len() - i) as u16);
-        // }
-
-        let (start, end) = p.as_chunks::<4>();
-
-        self.s2 += self.s1 * Wrapping(p.len() as u16);
-        let mut s2 = u16x4::from_array([
-            self.s2.0,
-            (*end.get(0).unwrap_or(&0) as u16).wrapping_mul(end.len() as u16),
-            (*end.get(1).unwrap_or(&0) as u16)
-                .wrapping_mul(end.len().checked_sub(1).unwrap_or(0) as u16),
-            (*end.get(2).unwrap_or(&0) as u16)
-                .wrapping_mul(end.len().checked_sub(2).unwrap_or(0) as u16),
-        ]);
-        for (i, bs) in start.iter().enumerate() {
-            let mul = p.len() - (i * 4);
-            let bs = u16x4::from_array([
-                bs[0] as u16 * (mul - 0) as u16,
-                bs[1] as u16 * (mul - 1) as u16,
-                bs[2] as u16 * (mul - 2) as u16,
-                bs[3] as u16 * (mul - 3) as u16,
-            ]);
-            s2 += bs;
+        for b in p {
+            self.s1 += *b as u16;
+            self.s2 += self.s1;
         }
-        self.s2 = Wrapping(s2.reduce_sum());
-
-        // for (i, b) in end.iter().enumerate() {
-        //     self.s2 += Wrapping(*b as u16) * Wrapping((end.len() - i) as u16);
-        // }
-
-        // println!("== end");
-        // self.s2 += Wrapping(*end.get(0).unwrap_or(&0) as u16) * Wrapping((end.len() - 0) as u16);
-        // self.s2 += Wrapping(*end.get(1).unwrap_or(&0) as u16) * Wrapping((end.len() - 1) as u16);
-        // self.s2 += Wrapping(*end.get(2).unwrap_or(&0) as u16) * Wrapping((end.len() - 2) as u16);
-
-        // let mut s2 = u16x4::from_array([self.s1.0, 0, 0, 0]);
-        // let mut s1_2 = u16x4::splat(0);
-        // self.s2 += self.s1 * Wrapping(p.len() as u16);
-        // for (i, bs) in start.iter().enumerate() {
-        //     let mul: u16 = (start.len() - (i + 1)) as u16 * 4 + end.len() as u16;
-
-        //     self.s2 += Wrapping(bs[0] as u16) * Wrapping(mul + 4);
-        //     self.s2 += Wrapping(bs[1] as u16) * Wrapping(mul + 3);
-        //     self.s2 += Wrapping(bs[2] as u16) * Wrapping(mul + 2);
-        //     self.s2 += Wrapping(bs[3] as u16) * Wrapping(mul + 1);
-        // }
-
-        // self.s2 += Wrapping(*end.get(0).unwrap_or(&0) as u16) * Wrapping(4);
-        // self.s2 += Wrapping(*end.get(1).unwrap_or(&0) as u16) * Wrapping(3);
-        // self.s2 += Wrapping(*end.get(2).unwrap_or(&0) as u16) * Wrapping(2);
-        // self.s2 += Wrapping(*end.get(3).unwrap_or(&0) as u16) * Wrapping(1);
-
-        let mut s1 = u16x4::from_array([
-            self.s1.0,
-            *end.get(0).unwrap_or(&0) as u16,
-            *end.get(1).unwrap_or(&0) as u16,
-            *end.get(2).unwrap_or(&0) as u16,
-        ]);
-
-        for &bs in start {
-            let b4 = u16x4::from_array([bs[0] as u16, bs[1] as u16, bs[2] as u16, bs[3] as u16]);
-            s1 += b4;
-        }
-        self.s1 = Wrapping(s1.reduce_sum());
 
         self.s1 += Wrapping(l as u16) * Wrapping(ROLLSUM_CHAR_OFFSET);
         // don't think `(l+1)*l/2` should be allowed to overflow, but not sure,
@@ -108,57 +39,6 @@ impl Rollsum {
         self.s2 += Wrapping(((l + 1) * l / 2) as u16) * Wrapping(ROLLSUM_CHAR_OFFSET);
         self.count += l;
     }
-
-    // pub fn update(&mut self, p: &[u8]) {
-    //     let l = p.len();
-
-    //     // for b in p {
-    //     //     self.s1 += *b as u16;
-    //     //     self.s2 += self.s1;
-    //     // }
-
-    //     self.s2 += self.s1 * Wrapping(p.len() as u16);
-    //     for (i, b) in p.iter().enumerate() {
-    //         self.s2 += Wrapping(*b as u16) * Wrapping((p.len() - i) as u16);
-    //     }
-
-    //     let (start, end) = p.as_chunks::<4>();
-    //     let mut s1 = u16x4::from_array([
-    //         self.s1.0,
-    //         *end.get(0).unwrap_or(&0) as u16,
-    //         *end.get(1).unwrap_or(&0) as u16,
-    //         *end.get(2).unwrap_or(&0) as u16,
-    //     ]);
-    //     for &bs in start {
-    //         let b4 = u16x4::from_array([bs[0] as u16, bs[1] as u16, bs[2] as u16, bs[3] as u16]);
-    //         s1 += b4;
-    //     }
-    //     self.s1 = Wrapping(s1.reduce_sum());
-
-    //     self.s1 += Wrapping(l as u16) * Wrapping(ROLLSUM_CHAR_OFFSET);
-    //     // don't think `(l+1)*l/2` should be allowed to overflow, but not sure,
-    //     // the maximum allowed value of l is not clear either
-    //     // ref: https://github.com/librsync/librsync/blob/ee3df5c8775d571871170c52613c36af1a51db36/src/rollsum.c#L31
-    //     self.s2 += Wrapping(((l + 1) * l / 2) as u16) * Wrapping(ROLLSUM_CHAR_OFFSET);
-    //     self.count += l;
-    // }
-
-    // pub fn update(&mut self, p: &[u8]) {
-    //     let l = p.len();
-
-    //     self.s2 += self.s1 * Wrapping(p.len() as u16);
-    //     for (i, b) in p.iter().enumerate() {
-    //         self.s1 += *b as u16;
-    //         self.s2 += Wrapping(*b as u16) * Wrapping((p.len() - i) as u16);
-    //     }
-
-    //     self.s1 += Wrapping(l as u16) * Wrapping(ROLLSUM_CHAR_OFFSET);
-    //     // don't think `(l+1)*l/2` should be allowed to overflow, but not sure,
-    //     // the maximum allowed value of l is not clear either
-    //     // ref: https://github.com/librsync/librsync/blob/ee3df5c8775d571871170c52613c36af1a51db36/src/rollsum.c#L31
-    //     self.s2 += Wrapping(((l + 1) * l / 2) as u16) * Wrapping(ROLLSUM_CHAR_OFFSET);
-    //     self.count += l;
-    // }
 
     #[inline]
     pub fn rotate(&mut self, outb: u8, inb: u8) {
