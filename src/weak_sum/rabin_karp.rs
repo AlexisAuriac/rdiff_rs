@@ -78,6 +78,7 @@ impl RabinKarp {
         self.count
     }
 
+    // could be slightly faster with u32x8 or more
     #[inline(always)]
     fn compress_chunk(&self, hash: Wrapping<u32>, chunk: &[u8]) -> Wrapping<u32> {
         debug_assert!(chunk.len() <= RABINKARP_MULT_POW.len());
