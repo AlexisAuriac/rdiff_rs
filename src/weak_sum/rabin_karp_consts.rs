@@ -34,7 +34,7 @@ const fn compute_mult_pow<const N: usize>() -> [u32; N] {
 }
 
 // we could go over 2048, but that feels overkill
-// goes from RABINKARP_MULT^1 to RABINKARP_MULT^2048 (included)
+// goes from RABINKARP_MULT^0 to RABINKARP_MULT^2047 (included)
 pub static RABINKARP_MULT_POW: [u32; 2048] = compute_mult_pow();
 pub const RABINKARP_MULT_POW_N: u32 = RABINKARP_MULT.wrapping_pow(RABINKARP_MULT_POW.len() as u32);
 
