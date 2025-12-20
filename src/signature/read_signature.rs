@@ -173,4 +173,24 @@ mod tests {
             Err(e) => panic!("expected {:?}, got {e:?}", Error::BadStrongLen(33)),
         }
     }
+
+    #[test]
+    fn test_bad_input_size_too_small() {
+        let sig = make_bad_signature(SignatureType::RkBlake2B as u32, 2048, 32, &[]);
+
+        match read_signature(&mut Cursor::new(sig), Some(5)) {
+            Ok(_) => (),
+            Err(e) => panic!("inaccurate input size should be quietly ignored, got {e:?}"),
+        }
+    }
+
+    #[test]
+    fn test_bad_input_size_too_large() {
+        let sig = make_bad_signature(SignatureType::RkBlake2B as u32, 2048, 32, &[]);
+
+        match read_signature(&mut Cursor::new(sig), Some(4096)) {
+            Ok(_) => (),
+            Err(e) => panic!("inaccurate input size should be quietly ignored, got {e:?}"),
+        }
+    }
 }
