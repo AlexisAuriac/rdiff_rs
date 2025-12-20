@@ -93,7 +93,7 @@ mod tests {
 
     use super::*;
 
-    fn make_bad_signature(sigtype: u32, block_len: u32, strong_len: u32, data: &[u8]) -> Vec<u8> {
+    fn make_signature(sigtype: u32, block_len: u32, strong_len: u32, data: &[u8]) -> Vec<u8> {
         let mut signature = Vec::with_capacity(12 + data.len());
 
         signature.extend(sigtype.to_be_bytes());
@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn test_bad_sigtype() {
         let bad_sigtype = 0x01234567;
-        let sig = make_bad_signature(bad_sigtype, 2048, 32, &[]);
+        let sig = make_signature(bad_sigtype, 2048, 32, &[]);
 
         match read_signature(&mut Cursor::new(sig), None) {
             Ok(_) => panic!("expected error on bad sigtype"),
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn test_zero_block_len() {
-        let sig = make_bad_signature(SignatureType::RkBlake2B as u32, 0, 32, &[]);
+        let sig = make_signature(SignatureType::RkBlake2B as u32, 0, 32, &[]);
 
         match read_signature(&mut Cursor::new(sig), None) {
             Ok(_) => panic!("expected error on block_len == 0"),
@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_zero_strong_len() {
-        let sig = make_bad_signature(SignatureType::RkBlake2B as u32, 2048, 0, &[]);
+        let sig = make_signature(SignatureType::RkBlake2B as u32, 2048, 0, &[]);
 
         match read_signature(&mut Cursor::new(sig), None) {
             Ok(_) => panic!("expected error on strong_len == 0"),
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_strong_len_too_large_md4_1() {
-        let sig = make_bad_signature(SignatureType::Md4 as u32, 2048, 100, &[]);
+        let sig = make_signature(SignatureType::Md4 as u32, 2048, 100, &[]);
 
         match read_signature(&mut Cursor::new(sig), None) {
             Ok(_) => panic!("expected error on strong_len too large"),
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn test_strong_len_too_large_md4_2() {
-        let sig = make_bad_signature(SignatureType::Md4 as u32, 2048, 24, &[]);
+        let sig = make_signature(SignatureType::Md4 as u32, 2048, 24, &[]);
 
         match read_signature(&mut Cursor::new(sig), None) {
             Ok(_) => panic!("expected error on strong_len too large"),
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_strong_len_too_large_blake2b() {
-        let sig = make_bad_signature(SignatureType::Blake2B as u32, 2048, 33, &[]);
+        let sig = make_signature(SignatureType::Blake2B as u32, 2048, 33, &[]);
 
         match read_signature(&mut Cursor::new(sig), None) {
             Ok(_) => panic!("expected error on strong_len too large"),
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_bad_input_size_too_small() {
-        let sig = make_bad_signature(SignatureType::RkBlake2B as u32, 2048, 32, &[]);
+        let sig = make_signature(SignatureType::RkBlake2B as u32, 2048, 32, &[]);
 
         match read_signature(&mut Cursor::new(sig), Some(5)) {
             Ok(_) => (),
@@ -186,11 +186,63 @@ mod tests {
 
     #[test]
     fn test_bad_input_size_too_large() {
-        let sig = make_bad_signature(SignatureType::RkBlake2B as u32, 2048, 32, &[]);
+        let sig = make_signature(SignatureType::RkBlake2B as u32, 2048, 32, &[]);
 
         match read_signature(&mut Cursor::new(sig), Some(4096)) {
             Ok(_) => (),
             Err(e) => panic!("inaccurate input size should be quietly ignored, got {e:?}"),
+        }
+    }
+
+    fn unexpected_eof() -> io::Error {
+        io::Error::new(io::ErrorKind::UnexpectedEof, "failed to fill whole buffer")
+    }
+
+    #[test]
+    fn test_partial_header() {
+        let sig = make_signature(SignatureType::RkBlake2B as u32, 2048, 32, &[]);
+        let mut cur = Cursor::new(sig).take(10);
+
+        match read_signature(&mut cur, None) {
+            Ok(_) => panic!("expected error on partial header"),
+            Err(Error::Io(e)) if e.kind() == io::ErrorKind::UnexpectedEof => (),
+            Err(e) => panic!("expected {:?}, got {e:?}", unexpected_eof()),
+        }
+    }
+
+    #[test]
+    fn test_partial_weak_sum() {
+        let data: Vec<u8> = (0..3).collect();
+        let sig = make_signature(SignatureType::RkBlake2B as u32, 2048, 32, &data);
+
+        match read_signature(&mut Cursor::new(sig), None) {
+            Ok(_) => panic!("expected error on partial weak sum"),
+            Err(Error::Io(e)) if e.kind() == io::ErrorKind::UnexpectedEof => (),
+            Err(e) => panic!("expected {:?}, got {e:?}", unexpected_eof()),
+        }
+    }
+
+    #[test]
+    fn test_partial_strong_sum() {
+        let data: Vec<u8> = (0..27).collect();
+        let sig = make_signature(SignatureType::RkBlake2B as u32, 2048, 24, &data);
+
+        match read_signature(&mut Cursor::new(sig), None) {
+            Ok(_) => panic!("expected error on partial strong sum"),
+            Err(Error::Io(e)) if e.kind() == io::ErrorKind::UnexpectedEof => (),
+            Err(e) => panic!("expected {:?}, got {e:?}", unexpected_eof()),
+        }
+    }
+
+    #[test]
+    fn test_missing_last_strong_sum() {
+        let data: Vec<u8> = (0..4).collect();
+        let sig = make_signature(SignatureType::RkBlake2B as u32, 2048, 24, &data);
+
+        match read_signature(&mut Cursor::new(sig), None) {
+            Ok(_) => panic!("expected error on missing last strong sum"),
+            Err(Error::Io(e)) if e.kind() == io::ErrorKind::UnexpectedEof => (),
+            Err(e) => panic!("expected {:?}, got {e:?}", unexpected_eof()),
         }
     }
 }
