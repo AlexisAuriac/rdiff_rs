@@ -36,7 +36,9 @@ where
 
     input.read_exact(&mut buf32)?;
     let strong_len = u32::from_be_bytes(buf32);
-    // todo: check strong_len makes sense
+    if strong_len == 0 || strong_len > sigtype.strong_type().sum_length() {
+        return Err(Error::BadStrongLen(strong_len));
+    }
 
     let input_size = size.unwrap_or(0);
     let nb_blocks = if input_size < 12 {
@@ -110,7 +112,10 @@ mod tests {
         match read_signature(&mut Cursor::new(sig), None) {
             Ok(_) => panic!("expected error on bad sigtype"),
             Err(Error::BadSigType(sigtype)) if sigtype == bad_sigtype => (),
-            Err(e) => panic!("expected Error::BadSigType({bad_sigtype}), got {e}"),
+            Err(e) => panic!(
+                "expected error {:?}, got {e:?}",
+                Error::BadSigType(bad_sigtype)
+            ),
         }
     }
 
@@ -121,7 +126,51 @@ mod tests {
         match read_signature(&mut Cursor::new(sig), None) {
             Ok(_) => panic!("expected error on block_len == 0"),
             Err(Error::ZeroBlockLen) => (),
-            Err(e) => panic!("expected Error::ZeroBlockLen, got {e}"),
+            Err(e) => panic!("expected error {:?}, got {e:?}", Error::ZeroBlockLen),
+        }
+    }
+
+    #[test]
+    fn test_zero_strong_len() {
+        let sig = make_bad_signature(SignatureType::RkBlake2B as u32, 2048, 0, &[]);
+
+        match read_signature(&mut Cursor::new(sig), None) {
+            Ok(_) => panic!("expected error on strong_len == 0"),
+            Err(Error::BadStrongLen(0)) => (),
+            Err(e) => panic!("expected error {:?}, got {e:?}", Error::BadStrongLen(0)),
+        }
+    }
+
+    #[test]
+    fn test_strong_len_too_large_md4_1() {
+        let sig = make_bad_signature(SignatureType::Md4 as u32, 2048, 100, &[]);
+
+        match read_signature(&mut Cursor::new(sig), None) {
+            Ok(_) => panic!("expected error on strong_len too large"),
+            Err(Error::BadStrongLen(100)) => (),
+            Err(e) => panic!("expected {:?}, got {e:?}", Error::BadStrongLen(100)),
+        }
+    }
+
+    #[test]
+    fn test_strong_len_too_large_md4_2() {
+        let sig = make_bad_signature(SignatureType::Md4 as u32, 2048, 24, &[]);
+
+        match read_signature(&mut Cursor::new(sig), None) {
+            Ok(_) => panic!("expected error on strong_len too large"),
+            Err(Error::BadStrongLen(24)) => (),
+            Err(e) => panic!("expected {:?}, got {e:?}", Error::BadStrongLen(24)),
+        }
+    }
+
+    #[test]
+    fn test_strong_len_too_large_blake2b() {
+        let sig = make_bad_signature(SignatureType::Blake2B as u32, 2048, 33, &[]);
+
+        match read_signature(&mut Cursor::new(sig), None) {
+            Ok(_) => panic!("expected error on strong_len too large"),
+            Err(Error::BadStrongLen(33)) => (),
+            Err(e) => panic!("expected {:?}, got {e:?}", Error::BadStrongLen(33)),
         }
     }
 }
