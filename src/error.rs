@@ -17,6 +17,7 @@ pub enum Error {
     BadSigType(u32),
     BadHashName(String),
     BadRollsumName(String),
+    ZeroBlockLen,
     BadStrongLen(u32),
     UnexpectedCommand(OpKind),
 }
@@ -39,6 +40,7 @@ impl Display for Error {
             Error::BadSigType(got) => write!(f, "bad signature type: {:#x}", got),
             Error::BadHashName(got) => write!(f, "bad hash name: {}", got),
             Error::BadRollsumName(got) => write!(f, "bad rollsum name: {}", got),
+            Error::ZeroBlockLen => write!(f, "block len is 0"),
             Error::BadStrongLen(got) => write!(f, "bad strong len: {}", got),
             Error::UnexpectedCommand(kind) => write!(f, "unexpected command: {:?}", kind),
         }

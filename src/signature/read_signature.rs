@@ -30,7 +30,9 @@ where
 
     input.read_exact(&mut buf32)?;
     let block_len = u32::from_be_bytes(buf32);
-    // todo: check block_len > 0
+    if block_len == 0 {
+        return Err(Error::ZeroBlockLen);
+    }
 
     input.read_exact(&mut buf32)?;
     let strong_len = u32::from_be_bytes(buf32);
@@ -81,4 +83,45 @@ where
     let input_size = f.metadata()?.len() as usize;
 
     read_signature(&mut f, Some(input_size))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::*;
+
+    fn make_bad_signature(sigtype: u32, block_len: u32, strong_len: u32, data: &[u8]) -> Vec<u8> {
+        let mut signature = Vec::with_capacity(12 + data.len());
+
+        signature.extend(sigtype.to_be_bytes());
+        signature.extend(block_len.to_be_bytes());
+        signature.extend(strong_len.to_be_bytes());
+        signature.extend(data);
+
+        signature
+    }
+
+    #[test]
+    fn test_bad_sigtype() {
+        let bad_sigtype = 0x01234567;
+        let sig = make_bad_signature(bad_sigtype, 2048, 32, &[]);
+
+        match read_signature(&mut Cursor::new(sig), None) {
+            Ok(_) => panic!("expected error on bad sigtype"),
+            Err(Error::BadSigType(sigtype)) if sigtype == bad_sigtype => (),
+            Err(e) => panic!("expected Error::BadSigType({bad_sigtype}), got {e}"),
+        }
+    }
+
+    #[test]
+    fn test_zero_block_len() {
+        let sig = make_bad_signature(SignatureType::RkBlake2B as u32, 0, 32, &[]);
+
+        match read_signature(&mut Cursor::new(sig), None) {
+            Ok(_) => panic!("expected error on block_len == 0"),
+            Err(Error::ZeroBlockLen) => (),
+            Err(e) => panic!("expected Error::ZeroBlockLen, got {e}"),
+        }
+    }
 }
