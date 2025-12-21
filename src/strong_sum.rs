@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use blake2::{Blake2b, Digest, digest::consts::U32};
 use md4::Md4;
 
@@ -20,18 +22,22 @@ pub enum StrongType {
 }
 
 impl StrongType {
-    pub fn try_from_str(s: &str) -> Result<Self, Error> {
-        match s {
-            "blake2" => Ok(StrongType::Blake2B),
-            "md4" => Ok(StrongType::Md4),
-            _ => Err(Error::BadHashName(s.to_string())),
-        }
-    }
-
     pub fn sum_length(&self) -> u32 {
         match self {
             Self::Blake2B => BLAKE2_SUM_LENGTH,
             Self::Md4 => MD4_SUM_LENGTH,
+        }
+    }
+}
+
+impl FromStr for StrongType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "blake2" => Ok(StrongType::Blake2B),
+            "md4" => Ok(StrongType::Md4),
+            _ => Err(Error::BadHashName(s.to_string())),
         }
     }
 }

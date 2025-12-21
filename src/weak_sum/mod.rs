@@ -2,6 +2,8 @@ pub mod rabin_karp;
 pub mod rabin_karp_consts;
 pub mod rollsum;
 
+use std::str::FromStr;
+
 use crate::error::Error;
 
 use rabin_karp::RabinKarp;
@@ -13,8 +15,10 @@ pub enum WeakSumType {
     RabinKarp,
 }
 
-impl WeakSumType {
-    pub fn try_from_str(s: &str) -> Result<Self, Error> {
+impl FromStr for WeakSumType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "rabinkarp" => Ok(WeakSumType::RabinKarp),
             "rollsum" => Ok(WeakSumType::Rollsum),

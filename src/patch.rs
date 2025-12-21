@@ -95,12 +95,12 @@ mod tests {
 
     fn generic_patch_test(
         name: &str,
-        sigtype: &str,
+        strong_type: &str,
         block_len: u32,
         strong_len: u32,
     ) -> Result<(), Error> {
-        StrongType::try_from_str(sigtype)?;
-        let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
+        strong_type.parse::<StrongType>()?;
+        let file_base_name = format!("{}-{}-{}-{}", name, strong_type, block_len, strong_len);
 
         let old_path = PathBuf::from("testdata").join(name).with_extension("old");
         let mut old_data = Cursor::new(fs::read(old_path)?);
@@ -126,8 +126,8 @@ mod tests {
             $(
                 #[test]
                 fn $name() -> Result<(), Error> {
-                    let (name, sigtype, block_len, strong_len) = $value;
-                    generic_patch_test(name, sigtype, block_len, strong_len)
+                    let (name, strong_type, block_len, strong_len) = $value;
+                    generic_patch_test(name, strong_type, block_len, strong_len)
                 }
             )*
         };
@@ -171,12 +171,12 @@ mod tests {
 
     fn generic_delta_and_patch_test(
         name: &str,
-        sigtype: &str,
+        strong_type: &str,
         block_len: u32,
         strong_len: u32,
     ) -> Result<(), Error> {
-        StrongType::try_from_str(sigtype)?;
-        let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
+        strong_type.parse::<StrongType>()?;
+        let file_base_name = format!("{}-{}-{}-{}", name, strong_type, block_len, strong_len);
 
         let sig_path = PathBuf::from("testdata")
             .join(file_base_name)
@@ -206,8 +206,8 @@ mod tests {
             $(
                 #[test]
                 fn $name() -> Result<(), Error> {
-                    let (name, sigtype, block_len, strong_len) = $value;
-                    generic_delta_and_patch_test(name, sigtype, block_len, strong_len   )
+                    let (name, strong_type, block_len, strong_len) = $value;
+                    generic_delta_and_patch_test(name, strong_type, block_len, strong_len   )
                 }
             )*
         };

@@ -3,7 +3,7 @@ mod whole;
 
 use anyhow::{Error, anyhow};
 use clap::{Parser, Subcommand};
-use rdiff::{signature::SignatureOptions, strong_sum::StrongType, weak_sum::WeakSumType};
+use rdiff::signature::SignatureOptions;
 use sum_size_value::SumSizeValue;
 use whole::{delta, patch, signature_opts};
 
@@ -81,8 +81,8 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Error>
             input_size,
             ..
         } => {
-            let weak = WeakSumType::try_from_str(rollsum)?;
-            let strong = StrongType::try_from_str(hash)?;
+            let weak = rollsum.parse()?;
+            let strong = hash.parse()?;
 
             let mut opts = SignatureOptions::new()
                 .weak_type(weak)
