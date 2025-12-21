@@ -11,6 +11,7 @@ use crate::{
     strong_sum::{MAX_STRONG_SUM_SIZE, StrongSumBlock},
 };
 
+#[derive(Debug)]
 pub struct Signature {
     pub sigtype: SignatureType,
     pub block_len: u32,
@@ -40,12 +41,10 @@ where
         return Err(Error::BadStrongLen(strong_len));
     }
 
-    let input_size = size.unwrap_or(0);
-    let nb_blocks = if input_size < 12 {
-        // the input size is just wrong
-        0
-    } else {
-        (input_size - 12) / (strong_len as usize + 4)
+    let nb_blocks = match size {
+        None => 0,
+        Some(size) if size < 12 => 0, // size is wrong
+        Some(size) => (size - 12) / (strong_len as usize + 4),
     };
 
     let mut strong_sigs = Vec::with_capacity(nb_blocks);
