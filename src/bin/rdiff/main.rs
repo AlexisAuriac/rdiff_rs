@@ -3,7 +3,7 @@ mod whole;
 
 use anyhow::{Error, anyhow};
 use clap::{Parser, Subcommand};
-use rdiff::signature::SignatureOptions;
+use rdiff::{signature::SignatureOptions, strong_sum::StrongType, weak_sum::WeakSumType};
 use sum_size_value::SumSizeValue;
 use whole::{delta, patch, signature_opts};
 
@@ -22,12 +22,12 @@ enum Command {
         #[arg(short = 'S', long, default_value = None)]
         /// Set signature strength (min, max, or a valid number)
         sum_size: Option<SumSizeValue>,
-        #[arg(short = 'H', long, default_value = "blake2")]
+        #[arg(short = 'H', long, default_value_t = StrongType::Blake2B)]
         /// Hash algorithm: blake2, md4
-        hash: String,
-        #[arg(short = 'R', long, default_value = "rabinkarp")]
+        hash: StrongType,
+        #[arg(short = 'R', long, default_value_t = WeakSumType::RabinKarp)]
         /// Rollsum algorithm: rabinkarp, rollsum
-        rollsum: String,
+        rollsum: WeakSumType,
         #[arg(short, long, default_value_t = false)]
         /// overwrite existing files
         force: bool,
@@ -81,12 +81,9 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Error>
             input_size,
             ..
         } => {
-            let weak = rollsum.parse()?;
-            let strong = hash.parse()?;
-
             let mut opts = SignatureOptions::new()
-                .weak_type(weak)
-                .strong_type(strong)
+                .weak_type(*rollsum)
+                .strong_type(*hash)
                 .to_owned();
 
             if let Some(block_size) = block_size {
