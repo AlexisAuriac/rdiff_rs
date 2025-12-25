@@ -32,20 +32,16 @@ where
         };
 
         let n = input.read(&mut buf[..read_count])?;
-        if n == 0 {
+        let data = &buf[..n];
+        if n < read_count {
+            ring_buf.write(data);
             break;
         }
-        let data = &buf[..n];
 
         if n == 1 {
             weak.rollin(data[0]);
         } else {
             weak.update(data);
-        }
-
-        if weak.count() < sig.block_len as usize {
-            ring_buf.write(data);
-            continue;
         }
 
         if weak.count() > sig.block_len as usize {
