@@ -119,7 +119,7 @@ impl<O: Write> DeltaBuilder<O> {
 
         self.pos = 0;
         self.len = 0;
-        self.lit.truncate(0);
+        self.lit.clear();
 
         Ok(())
     }
