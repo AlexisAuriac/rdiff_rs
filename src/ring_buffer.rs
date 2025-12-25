@@ -97,6 +97,8 @@ impl RingBuffer {
     pub fn front(&self) -> Option<u8> {
         if self.written == 0 {
             None
+        } else if self.written < self.size {
+            Some(self.data[0])
         } else {
             Some(self.data[self.cursor])
         }
@@ -242,5 +244,18 @@ mod tests {
 
         t(b"hello world");
         t(b"hey, hello world");
+    }
+
+    #[test]
+    fn front() {
+        let mut ring = RingBuffer::new(5);
+        let s = b"hello world";
+
+        assert_eq!(ring.front(), None);
+
+        for &b in s {
+            ring.write_byte(b);
+            assert_eq!(ring.front(), Some(ring.as_bytes()[0]));
+        }
     }
 }
