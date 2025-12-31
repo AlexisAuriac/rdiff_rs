@@ -10,11 +10,11 @@ pub const DELTA_MAGIC: u32 = 0x72730236;
 const DEFAULT_OUTPUT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
 fn min_int_size(d: u64) -> OpArgLen {
-    if d >= 2u64.pow(32) {
+    if d > u32::MAX as u64 {
         OpArgLen::N8
-    } else if d >= 2u64.pow(16) {
+    } else if d > u16::MAX as u64 {
         OpArgLen::N4
-    } else if d >= 2u64.pow(8) {
+    } else if d > u8::MAX as u64 {
         OpArgLen::N2
     } else {
         OpArgLen::N1
