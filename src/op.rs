@@ -17,7 +17,7 @@ pub enum OpArgLen {
     N8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Command {
     pub kind: OpKind,
     pub immediate: u8,
@@ -26,7 +26,7 @@ pub struct Command {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
     EndOp,
     Literal1,

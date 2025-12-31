@@ -130,12 +130,13 @@ impl<O: Write> DeltaBuilder<O> {
             self.kind = DeltaSegmentKind::Copy;
         }
 
-        if self.pos + self.len != pos {
+        if self.pos + self.len == pos {
+            // segments are contiguous, merge with current working segment
+            self.len += len;
+        } else {
             self.flush()?;
             self.pos = pos;
             self.len = len;
-        } else {
-            self.len += len;
         }
 
         Ok(())
