@@ -6,7 +6,7 @@ use crate::{
     op::{OP2CMD, OpArgLen, OpKind},
 };
 
-fn read_param<I>(i: &mut I, size: OpArgLen) -> Result<i64, Error>
+fn read_param<I>(i: &mut I, size: OpArgLen) -> Result<u64, Error>
 where
     I: Read,
 {
@@ -14,22 +14,22 @@ where
         OpArgLen::N1 => {
             let mut buf = [0u8; 1];
             i.read_exact(&mut buf)?;
-            Ok(buf[0] as i64)
+            Ok(buf[0] as u64)
         }
         OpArgLen::N2 => {
             let mut buf = [0u8; 2];
             i.read_exact(&mut buf)?;
-            Ok(u16::from_be_bytes(buf) as i64)
+            Ok(u16::from_be_bytes(buf) as u64)
         }
         OpArgLen::N4 => {
             let mut buf = [0u8; 4];
             i.read_exact(&mut buf)?;
-            Ok(u32::from_be_bytes(buf) as i64)
+            Ok(u32::from_be_bytes(buf) as u64)
         }
         OpArgLen::N8 => {
             let mut buf = [0u8; 8];
             i.read_exact(&mut buf)?;
-            Ok(u64::from_be_bytes(buf) as i64)
+            Ok(u64::from_be_bytes(buf))
         }
     }
 }
@@ -59,20 +59,20 @@ where
         let cmd = &OP2CMD[op as usize];
 
         let (param1, param2) = match (cmd.len1, cmd.len2) {
-            (None, _) => (cmd.immediate as i64, 0),
+            (None, _) => (cmd.immediate as u64, 0),
             (Some(len1), None) => (read_param(delta, len1)?, 0),
             (Some(len1), Some(len2)) => (read_param(delta, len1)?, read_param(delta, len2)?),
         };
 
         match cmd.kind {
             OpKind::Literal => {
-                let len = param1 as u64;
+                let len = param1;
 
                 copy(&mut delta.take(len), out)?;
             }
             OpKind::Copy => {
-                let pos = param1 as u64;
-                let len = param2 as u64;
+                let pos = param1;
+                let len = param2;
 
                 old.seek(SeekFrom::Start(pos))?;
                 copy(&mut old.take(len), out)?;
