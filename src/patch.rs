@@ -1,10 +1,26 @@
-use std::io::{Read, Seek, SeekFrom, Write, copy};
+use std::io::{self, Read, Seek, SeekFrom, Write, copy};
 
 use crate::{
     delta::builder::DELTA_MAGIC,
     error::Error,
     op::{OP2CMD, OpArgLen, OpKind},
 };
+
+fn copy_n<R, W>(reader: &mut R, writer: &mut W, len: u64) -> Result<(), io::Error>
+where
+    R: Read,
+    W: Write,
+{
+    let n = copy(&mut reader.take(len), writer)?;
+    if n != len {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ));
+    }
+
+    Ok(())
+}
 
 fn read_param<I>(i: &mut I, size: OpArgLen) -> Result<u64, Error>
 where
@@ -43,7 +59,6 @@ where
     let mut magic_buf = [0u8; 4];
     delta.read_exact(&mut magic_buf)?;
     let magic = u32::from_be_bytes(magic_buf);
-
     if magic != DELTA_MAGIC {
         return Err(Error::BadMagic {
             expect_name: "delta".to_string(),
@@ -68,14 +83,14 @@ where
             OpKind::Literal => {
                 let len = param1;
 
-                copy(&mut delta.take(len), out)?;
+                copy_n(delta, out, len)?;
             }
             OpKind::Copy => {
                 let pos = param1;
                 let len = param2;
 
                 old.seek(SeekFrom::Start(pos))?;
-                copy(&mut old.take(len), out)?;
+                copy_n(old, out, len)?;
             }
             OpKind::End => break,
             _ => return Err(Error::UnexpectedCommand(cmd.kind)),
