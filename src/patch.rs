@@ -60,11 +60,7 @@ where
     delta.read_exact(&mut magic_buf)?;
     let magic = u32::from_be_bytes(magic_buf);
     if magic != DELTA_MAGIC {
-        return Err(Error::BadMagic {
-            expect_name: "delta".to_string(),
-            expect_value: DELTA_MAGIC,
-            got: magic,
-        });
+        return Err(Error::BadDeltaMagic(magic));
     }
 
     loop {
@@ -211,18 +207,10 @@ mod tests {
         let delta = make_delta(vec![bad_magic.into()]);
 
         match generic_patch_err_test(delta, None, None) {
-            Error::BadMagic {
-                expect_name,
-                expect_value,
-                got,
-            } if expect_name == "delta" && expect_value == DELTA_MAGIC && got == bad_magic => {}
+            Error::BadDeltaMagic(magic) if magic == bad_magic => (),
             err => panic!(
                 "expected {:?}, got {err:?}",
-                Error::BadMagic {
-                    expect_name: "delta".to_string(),
-                    expect_value: DELTA_MAGIC,
-                    got: bad_magic,
-                },
+                Error::BadDeltaMagic(bad_magic),
             ),
         }
     }
