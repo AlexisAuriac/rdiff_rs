@@ -7,14 +7,14 @@ use crate::{
 
 pub const DELTA_MAGIC: u32 = 0x72730236;
 
-const OUTPUT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+const DEFAULT_OUTPUT_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
 fn min_int_size(d: u64) -> OpArgLen {
-    if d >= 2u64.pow(32) {
+    if d > u32::MAX as u64 {
         OpArgLen::N8
-    } else if d >= 2u64.pow(16) {
+    } else if d > u16::MAX as u64 {
         OpArgLen::N4
-    } else if d >= 2u64.pow(8) {
+    } else if d > u8::MAX as u64 {
         OpArgLen::N2
     } else {
         OpArgLen::N1
@@ -66,14 +66,20 @@ pub struct DeltaBuilder<O> {
 }
 
 impl<O: Write> DeltaBuilder<O> {
-    pub fn new(output: O) -> Self {
+    pub fn with_buffer_size(output: O, buf_size: usize) -> Self {
+        assert!(buf_size > 0, "buffer size must be non zero");
+
         Self {
             output,
-            lit: Vec::with_capacity(OUTPUT_BUFFER_SIZE),
+            lit: Vec::with_capacity(buf_size),
             kind: DeltaSegmentKind::Literal,
             pos: 0,
             len: 0,
         }
+    }
+
+    pub fn new(output: O) -> Self {
+        Self::with_buffer_size(output, DEFAULT_OUTPUT_BUFFER_SIZE)
     }
 
     pub fn write_magic(&mut self) -> Result<(), Error> {
@@ -119,7 +125,7 @@ impl<O: Write> DeltaBuilder<O> {
 
         self.pos = 0;
         self.len = 0;
-        self.lit.truncate(0);
+        self.lit.clear();
 
         Ok(())
     }
@@ -130,12 +136,13 @@ impl<O: Write> DeltaBuilder<O> {
             self.kind = DeltaSegmentKind::Copy;
         }
 
-        if self.pos + self.len != pos {
+        if self.pos + self.len == pos {
+            // segments are contiguous, merge with current working segment
+            self.len += len;
+        } else {
             self.flush()?;
             self.pos = pos;
             self.len = len;
-        } else {
-            self.len += len;
         }
 
         Ok(())
@@ -145,14 +152,12 @@ impl<O: Write> DeltaBuilder<O> {
         if self.kind != DeltaSegmentKind::Literal {
             self.flush()?;
             self.kind = DeltaSegmentKind::Literal;
+        } else if self.lit.len() == self.lit.capacity() {
+            self.flush()?;
         }
 
         self.lit.push(b);
         self.len += 1;
-
-        if self.len as usize >= OUTPUT_BUFFER_SIZE {
-            self.flush()?
-        }
 
         Ok(())
     }
@@ -174,7 +179,7 @@ impl<O: Write> DeltaBuilder<O> {
             self.flush()?;
 
             buf = second;
-            remain = self.lit.capacity() - self.lit.len();
+            remain = self.lit.capacity();
         }
 
         self.lit.extend(buf);
@@ -191,6 +196,8 @@ impl<O: Write> DeltaBuilder<O> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
 
     #[test]
@@ -211,5 +218,101 @@ mod tests {
         assert_eq!(min_int_size(u32::MAX as u64 + 1), OpArgLen::N8);
         assert_eq!(min_int_size(1 << 32), OpArgLen::N8);
         assert_eq!(min_int_size(u64::MAX), OpArgLen::N8);
+    }
+
+    #[test]
+    fn add_byte() -> Result<(), Error> {
+        let mut buf = Vec::new();
+        let w = Cursor::new(&mut buf);
+        let mut builder = DeltaBuilder::with_buffer_size(w, 32);
+
+        builder.add_byte(1)?;
+        builder.add_byte(2)?;
+        builder.add_byte(3)?;
+        builder.add_byte(4)?;
+        builder.flush()?;
+
+        assert_eq!(buf, [Op::LiteralN1 as u8, 4, 1, 2, 3, 4]);
+        Ok(())
+    }
+
+    #[test]
+    fn add_byte_buffer_full1() -> Result<(), Error> {
+        let mut buf = Vec::new();
+        let w = Cursor::new(&mut buf);
+        let mut builder = DeltaBuilder::with_buffer_size(w, 2);
+
+        builder.add_byte(1)?;
+        builder.add_byte(2)?;
+        builder.add_byte(3)?;
+        builder.add_byte(4)?;
+        builder.flush()?;
+
+        assert_eq!(
+            buf,
+            [Op::LiteralN1 as u8, 2, 1, 2, Op::LiteralN1 as u8, 2, 3, 4]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn add_byte_buffer_full2() -> Result<(), Error> {
+        let mut buf = Vec::new();
+        let w = Cursor::new(&mut buf);
+        let mut builder = DeltaBuilder::with_buffer_size(w, 4);
+
+        builder.add_bytes(&[1, 2, 3, 4])?;
+        builder.add_byte(5)?;
+        builder.flush()?;
+
+        assert_eq!(
+            buf,
+            [
+                Op::LiteralN1 as u8,
+                4,
+                1,
+                2,
+                3,
+                4,
+                Op::LiteralN1 as u8,
+                1,
+                5
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn add_bytes_buffer_full() -> Result<(), Error> {
+        let mut buf = Vec::new();
+        let w = Cursor::new(&mut buf);
+        let mut builder = DeltaBuilder::with_buffer_size(w, 2);
+
+        builder.add_bytes(&[1, 2, 3])?;
+        builder.add_bytes(&[4, 5, 6])?;
+        builder.add_bytes(&[7])?;
+        builder.flush()?;
+
+        assert_eq!(
+            buf,
+            [
+                Op::LiteralN1 as u8,
+                2,
+                1,
+                2,
+                Op::LiteralN1 as u8,
+                2,
+                3,
+                4,
+                Op::LiteralN1 as u8,
+                2,
+                5,
+                6,
+                Op::LiteralN1 as u8,
+                1,
+                7
+            ]
+        );
+        Ok(())
     }
 }

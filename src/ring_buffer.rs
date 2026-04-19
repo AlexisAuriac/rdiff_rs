@@ -64,11 +64,11 @@ impl RingBuffer {
                 self.data[start..end].copy_from_slice(buf);
             }
             Ordering::Less => {
-                let (left_out, right_out) = self.data.split_at_mut(self.cursor);
-                let (left_in, right_in) = buf.split_at(remain);
+                let (lring, rring) = self.data.split_at_mut(self.cursor);
+                let (lbuf, rbuf) = buf.split_at(remain);
 
-                right_out.copy_from_slice(left_in);
-                left_out[..buf.len() - remain].copy_from_slice(right_in);
+                rring.copy_from_slice(lbuf);
+                lring[..rbuf.len()].copy_from_slice(rbuf);
             }
         }
 
@@ -97,6 +97,8 @@ impl RingBuffer {
     pub fn front(&self) -> Option<u8> {
         if self.written == 0 {
             None
+        } else if self.written < self.size {
+            Some(self.data[0])
         } else {
             Some(self.data[self.cursor])
         }
@@ -242,5 +244,18 @@ mod tests {
 
         t(b"hello world");
         t(b"hey, hello world");
+    }
+
+    #[test]
+    fn front() {
+        let mut ring = RingBuffer::new(5);
+        let s = b"hello world";
+
+        assert_eq!(ring.front(), None);
+
+        for &b in s {
+            ring.write_byte(b);
+            assert_eq!(ring.front(), Some(ring.as_bytes()[0]));
+        }
     }
 }

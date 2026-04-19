@@ -198,7 +198,7 @@ where
 mod tests {
     use std::{fs, io::Cursor, path::PathBuf};
 
-    use crate::{signature::read_signature, strong_sum::StrongType, weak_sum::WeakSumType};
+    use crate::signature::read_signature;
 
     use super::*;
 
@@ -222,8 +222,8 @@ mod tests {
         strong_len: u32,
     ) -> Result<(), Error> {
         let file_base_name = format!("{}-{}-{}-{}", name, strong, block_len, strong_len);
-        let weak_type = WeakSumType::try_from_str(weak)?;
-        let strong_type = StrongType::try_from_str(strong)?;
+        let weak_type = weak.parse()?;
+        let strong_type = strong.parse()?;
 
         let old_data_path = PathBuf::from("testdata").join(name).with_extension("old");
         let mut input = Cursor::new(fs::read(&old_data_path)?);

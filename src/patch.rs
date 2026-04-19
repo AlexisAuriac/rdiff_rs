@@ -1,4 +1,4 @@
-use std::io::{Read, Seek, SeekFrom, Write, copy};
+use std::io::{self, Read, Seek, SeekFrom, Write, copy};
 
 use crate::{
     delta::builder::DELTA_MAGIC,
@@ -6,7 +6,23 @@ use crate::{
     op::{OP2CMD, OpArgLen, OpKind},
 };
 
-fn read_param<I>(i: &mut I, size: OpArgLen) -> Result<i64, Error>
+fn copy_n<R, W>(reader: &mut R, writer: &mut W, len: u64) -> Result<(), io::Error>
+where
+    R: Read,
+    W: Write,
+{
+    let n = copy(&mut reader.take(len), writer)?;
+    if n != len {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ));
+    }
+
+    Ok(())
+}
+
+fn read_param<I>(i: &mut I, size: OpArgLen) -> Result<u64, Error>
 where
     I: Read,
 {
@@ -14,22 +30,22 @@ where
         OpArgLen::N1 => {
             let mut buf = [0u8; 1];
             i.read_exact(&mut buf)?;
-            Ok(buf[0] as i64)
+            Ok(buf[0] as u64)
         }
         OpArgLen::N2 => {
             let mut buf = [0u8; 2];
             i.read_exact(&mut buf)?;
-            Ok(u16::from_be_bytes(buf) as i64)
+            Ok(u16::from_be_bytes(buf) as u64)
         }
         OpArgLen::N4 => {
             let mut buf = [0u8; 4];
             i.read_exact(&mut buf)?;
-            Ok(u32::from_be_bytes(buf) as i64)
+            Ok(u32::from_be_bytes(buf) as u64)
         }
         OpArgLen::N8 => {
             let mut buf = [0u8; 8];
             i.read_exact(&mut buf)?;
-            Ok(u64::from_be_bytes(buf) as i64)
+            Ok(u64::from_be_bytes(buf))
         }
     }
 }
@@ -43,13 +59,8 @@ where
     let mut magic_buf = [0u8; 4];
     delta.read_exact(&mut magic_buf)?;
     let magic = u32::from_be_bytes(magic_buf);
-
     if magic != DELTA_MAGIC {
-        return Err(Error::BadMagic {
-            expect_name: "delta".to_string(),
-            expect_value: DELTA_MAGIC,
-            got: magic,
-        });
+        return Err(Error::BadDeltaMagic(magic));
     }
 
     loop {
@@ -59,23 +70,23 @@ where
         let cmd = &OP2CMD[op as usize];
 
         let (param1, param2) = match (cmd.len1, cmd.len2) {
-            (None, _) => (cmd.immediate as i64, 0),
+            (None, _) => (cmd.immediate as u64, 0),
             (Some(len1), None) => (read_param(delta, len1)?, 0),
             (Some(len1), Some(len2)) => (read_param(delta, len1)?, read_param(delta, len2)?),
         };
 
         match cmd.kind {
             OpKind::Literal => {
-                let len = param1 as u64;
+                let len = param1;
 
-                copy(&mut delta.take(len), out)?;
+                copy_n(delta, out, len)?;
             }
             OpKind::Copy => {
-                let pos = param1 as u64;
-                let len = param2 as u64;
+                let pos = param1;
+                let len = param2;
 
                 old.seek(SeekFrom::Start(pos))?;
-                copy(&mut old.take(len), out)?;
+                copy_n(old, out, len)?;
             }
             OpKind::End => break,
             _ => return Err(Error::UnexpectedCommand(cmd.kind)),
@@ -87,20 +98,261 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Cursor, path::PathBuf};
+    use std::{
+        fs,
+        io::{self, Cursor},
+        path::PathBuf,
+    };
 
-    use crate::{delta::delta, signature::read_signature_file, strong_sum::StrongType};
+    use crate::{delta::delta, op::Op, signature::read_signature_file, strong_sum::StrongType};
 
     use super::*;
 
+    #[derive(Debug, Clone)]
+    enum DeltaElem {
+        Op(Op),
+        U8(u8),
+        U16(u16),
+        U32(u32),
+        U64(u64),
+        Arr(Vec<u8>),
+    }
+
+    impl From<Op> for DeltaElem {
+        fn from(val: Op) -> Self {
+            DeltaElem::Op(val)
+        }
+    }
+
+    impl From<u8> for DeltaElem {
+        fn from(val: u8) -> Self {
+            DeltaElem::U8(val)
+        }
+    }
+
+    impl From<u16> for DeltaElem {
+        fn from(val: u16) -> Self {
+            DeltaElem::U16(val)
+        }
+    }
+
+    impl From<u32> for DeltaElem {
+        fn from(val: u32) -> Self {
+            DeltaElem::U32(val)
+        }
+    }
+
+    impl From<u64> for DeltaElem {
+        fn from(val: u64) -> Self {
+            DeltaElem::U64(val)
+        }
+    }
+
+    impl<const T: usize> From<[u8; T]> for DeltaElem {
+        fn from(val: [u8; T]) -> Self {
+            DeltaElem::Arr(val.to_vec())
+        }
+    }
+
+    impl DeltaElem {
+        pub fn into_vec(self) -> Vec<u8> {
+            match self {
+                DeltaElem::Op(op) => vec![op as u8],
+                DeltaElem::U8(n) => vec![n],
+                DeltaElem::U16(n) => n.to_be_bytes().to_vec(),
+                DeltaElem::U32(n) => n.to_be_bytes().to_vec(),
+                DeltaElem::U64(n) => n.to_be_bytes().to_vec(),
+                DeltaElem::Arr(bytes) => bytes,
+            }
+        }
+    }
+
+    fn make_delta(elems: Vec<DeltaElem>) -> Vec<u8> {
+        elems.into_iter().flat_map(|e| e.into_vec()).collect()
+    }
+
+    fn generic_patch_err_test(
+        delta: Vec<u8>,
+        old: Option<Vec<u8>>,
+        new: Option<&mut Vec<u8>>,
+    ) -> Error {
+        let old = old.unwrap_or(vec![]);
+        let mut new_buf = vec![];
+        let new = new.unwrap_or(&mut new_buf);
+
+        let Err(err) = patch(
+            &mut Cursor::new(old),
+            &mut Cursor::new(delta),
+            &mut Cursor::new(new),
+        ) else {
+            panic!("got no error")
+        };
+
+        err
+    }
+
+    #[test]
+    fn err_empty() {
+        let delta = make_delta(vec![]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_bad_magic() {
+        let bad_magic = DELTA_MAGIC.rotate_right(1);
+        let delta = make_delta(vec![bad_magic.into()]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::BadDeltaMagic(magic) if magic == bad_magic => (),
+            err => panic!(
+                "expected {:?}, got {err:?}",
+                Error::BadDeltaMagic(bad_magic),
+            ),
+        }
+    }
+
+    #[test]
+    fn err_no_end_op() {
+        let delta = make_delta(vec![DELTA_MAGIC.into()]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_unexpected_command() {
+        let delta = make_delta(vec![DELTA_MAGIC.into(), Op::Reserved85.into()]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::UnexpectedCommand(OpKind::Reserved) => (),
+            err => panic!(
+                "expected {:?}, got {err:?}",
+                Error::UnexpectedCommand(OpKind::Reserved),
+            ),
+        }
+    }
+
+    #[test]
+    fn err_literal_read_missing_len() {
+        let delta = make_delta(vec![DELTA_MAGIC.into(), Op::LiteralN1.into()]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_literal_read_partial_len() {
+        let delta = make_delta(vec![DELTA_MAGIC.into(), Op::LiteralN8.into(), 1u32.into()]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_literal_invalid_len() {
+        let delta = make_delta(vec![DELTA_MAGIC.into(), Op::LiteralN1.into(), 1u8.into()]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_copy_missing_pos() {
+        let delta = make_delta(vec![DELTA_MAGIC.into(), Op::CopyN1N1.into()]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_copy_partial_pos() {
+        let delta = make_delta(vec![DELTA_MAGIC.into(), Op::CopyN8N1.into(), 1u32.into()]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_copy_missing_len() {
+        let delta = make_delta(vec![DELTA_MAGIC.into(), Op::CopyN1N1.into(), 1u8.into()]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_copy_partial_len() {
+        let delta = make_delta(vec![
+            DELTA_MAGIC.into(),
+            Op::CopyN1N8.into(),
+            1u8.into(),
+            1u32.into(),
+        ]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_copy_pos_out_of_bounds() {
+        let delta = make_delta(vec![
+            DELTA_MAGIC.into(),
+            Op::CopyN1N1.into(),
+            100u8.into(),
+            1u8.into(),
+            Op::EndOp.into(),
+        ]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn err_copy_len_out_of_bounds() {
+        let delta = make_delta(vec![
+            DELTA_MAGIC.into(),
+            Op::CopyN1N8.into(),
+            0u8.into(),
+            1u8.into(),
+            Op::EndOp.into(),
+        ]);
+
+        match generic_patch_err_test(delta, None, None) {
+            Error::Io(err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            err => panic!("expected UnexpectedEof, got {err:?}"),
+        }
+    }
+
     fn generic_patch_test(
         name: &str,
-        sigtype: &str,
+        strong_type: &str,
         block_len: u32,
         strong_len: u32,
     ) -> Result<(), Error> {
-        StrongType::try_from_str(sigtype)?;
-        let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
+        strong_type.parse::<StrongType>()?;
+        let file_base_name = format!("{}-{}-{}-{}", name, strong_type, block_len, strong_len);
 
         let old_path = PathBuf::from("testdata").join(name).with_extension("old");
         let mut old_data = Cursor::new(fs::read(old_path)?);
@@ -126,8 +378,8 @@ mod tests {
             $(
                 #[test]
                 fn $name() -> Result<(), Error> {
-                    let (name, sigtype, block_len, strong_len) = $value;
-                    generic_patch_test(name, sigtype, block_len, strong_len)
+                    let (name, strong_type, block_len, strong_len) = $value;
+                    generic_patch_test(name, strong_type, block_len, strong_len)
                 }
             )*
         };
@@ -171,12 +423,12 @@ mod tests {
 
     fn generic_delta_and_patch_test(
         name: &str,
-        sigtype: &str,
+        strong_type: &str,
         block_len: u32,
         strong_len: u32,
     ) -> Result<(), Error> {
-        StrongType::try_from_str(sigtype)?;
-        let file_base_name = format!("{}-{}-{}-{}", name, sigtype, block_len, strong_len);
+        strong_type.parse::<StrongType>()?;
+        let file_base_name = format!("{}-{}-{}-{}", name, strong_type, block_len, strong_len);
 
         let sig_path = PathBuf::from("testdata")
             .join(file_base_name)
@@ -206,8 +458,8 @@ mod tests {
             $(
                 #[test]
                 fn $name() -> Result<(), Error> {
-                    let (name, sigtype, block_len, strong_len) = $value;
-                    generic_delta_and_patch_test(name, sigtype, block_len, strong_len   )
+                    let (name, strong_type, block_len, strong_len) = $value;
+                    generic_delta_and_patch_test(name, strong_type, block_len, strong_len)
                 }
             )*
         };

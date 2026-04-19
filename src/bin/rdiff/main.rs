@@ -1,8 +1,10 @@
+mod sum_size_value;
 mod whole;
 
 use anyhow::{Error, anyhow};
 use clap::{Parser, Subcommand};
 use rdiff::{signature::SignatureOptions, strong_sum::StrongType, weak_sum::WeakSumType};
+use sum_size_value::SumSizeValue;
 use whole::{delta, patch, signature_opts};
 
 #[derive(Debug, Subcommand)]
@@ -18,14 +20,14 @@ enum Command {
         /// Signature block size
         block_size: Option<u32>,
         #[arg(short = 'S', long, default_value = None)]
-        /// Set signature strength (-1 for minimum, max by default)
-        sum_size: Option<i64>,
-        #[arg(short = 'H', long, default_value = "blake2")]
+        /// Set signature strength (min, max, or a valid number)
+        sum_size: Option<SumSizeValue>,
+        #[arg(short = 'H', long, default_value_t = StrongType::Blake2B)]
         /// Hash algorithm: blake2, md4
-        hash: String,
-        #[arg(short = 'R', long, default_value = "rabinkarp")]
+        hash: StrongType,
+        #[arg(short = 'R', long, default_value_t = WeakSumType::RabinKarp)]
         /// Rollsum algorithm: rabinkarp, rollsum
-        rollsum: String,
+        rollsum: WeakSumType,
         #[arg(short, long, default_value_t = false)]
         /// overwrite existing files
         force: bool,
@@ -79,12 +81,9 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Error>
             input_size,
             ..
         } => {
-            let weak = WeakSumType::try_from_str(rollsum)?;
-            let strong = StrongType::try_from_str(hash)?;
-
             let mut opts = SignatureOptions::new()
-                .weak_type(weak)
-                .strong_type(strong)
+                .weak_type(*rollsum)
+                .strong_type(*hash)
                 .to_owned();
 
             if let Some(block_size) = block_size {
@@ -95,23 +94,15 @@ fn signature_options_from_args(cmd: &Command) -> Result<SignatureOptions, Error>
                 opts.input_size(*input_size);
             }
 
-            // clumsy attempt to be compatible with the original rdiff
-            // -1 => min, 0 => max, n => n
             match sum_size {
-                Some(-1) => {
+                Some(SumSizeValue::Min) => {
                     opts.min_strong_len();
                 }
-                Some(0) => {
+                Some(SumSizeValue::Max) => {
                     opts.max_strong_len();
                 }
-                Some(sum_size) if *sum_size > u32::MAX as i64 => {
-                    return Err(anyhow!("sum size is too big"));
-                }
-                Some(sum_size) if *sum_size < -1 => {
-                    return Err(anyhow!("sum size is too small"));
-                }
-                Some(n) => {
-                    opts.strong_len(*n as u32);
+                Some(SumSizeValue::N(n)) => {
+                    opts.strong_len(*n);
                 }
                 None => (),
             }

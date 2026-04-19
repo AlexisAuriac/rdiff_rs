@@ -9,7 +9,7 @@ use crate::{
     delta::delta as io_delta,
     error::Error,
     patch::patch as io_patch,
-    signature::{SignatureOptions, read_signature},
+    signature::{SignatureOptions, read_signature_file},
 };
 
 pub fn signature<P1, P2>(basis: P1, sig_file: P2, force: bool) -> Result<(), Error>
@@ -72,13 +72,7 @@ where
     P2: AsRef<Path>,
     P3: AsRef<Path>,
 {
-    let sig = {
-        let mut sig_file = OpenOptions::new().read(true).open(&sig_file)?;
-        let input_size = sig_file.metadata()?.len() as usize;
-
-        read_signature(&mut sig_file, Some(input_size))?
-    };
-
+    let sig = read_signature_file(sig_file)?;
     let new_file = OpenOptions::new().read(true).open(&new_file)?;
     let mut delta_file = OpenOptions::new()
         .create(force)
